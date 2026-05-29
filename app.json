@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Gym Duo Tracker",
+    "slug": "gym-duo-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Accès à tes photos pour ton journal de progression.",
+          "cameraPermission": "Accès à ta caméra pour prendre des photos de progression."
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Accès à ta caméra pour prendre des photos de progression.",
+        "NSPhotoLibraryUsageDescription": "Accès à tes photos pour ton journal de progression."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7fa74c3d-8c2d-4118-b889-8637a120d3f6"
+      }
+    }
+  }
+}

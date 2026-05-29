@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const p = require\\('e:/projets/GymWorkout/node_modules/expo/node_modules/babel-preset-expo/package.json'\\); console.log\\(p.version\\)\")",
+      "Bash(node -e \"const p = require\\('e:/projets/GymWorkout/node_modules/babel-preset-expo/package.json'\\); console.log\\('babel-preset-expo at root:', p.version\\)\")",
+      "Bash(node -e \"require\\('./node_modules/@supabase/supabase-js/package.json'\\) && console.log\\('supabase ok:', require\\('./node_modules/@supabase/supabase-js/package.json'\\).version\\)\")",
+      "Bash(node fix-assets.js)",
+      "Bash(ngrok version *)",
+      "PowerShell(ngrok version 2>&1)",
+      "PowerShell(npm install -g ngrok 2>&1)",
+      "PowerShell(ngrok config add-authtoken 3EF1bOi7AxQLqnOyaTJ1uL447mA_qWRpekpiLekoPwkiaqS3 2>&1)",
+      "PowerShell(Get-Command ngrok)",
+      "PowerShell(ngrok version)",
+      "PowerShell(node -e \"const ngrok = require\\('ngrok'\\); console.log\\('ngrok module version:', require\\('ngrok/package.json'\\).version\\);\")",
+      "PowerShell(Get-Content \"$env:USERPROFILE\\\\AppData\\\\Local\\\\ngrok\\\\ngrok.yml\" -ErrorAction SilentlyContinue; Get-Content \"$env:USERPROFILE\\\\.ngrok2\\\\ngrok.yml\" -ErrorAction SilentlyContinue)",
+      "PowerShell(npx expo whoami 2>&1)",
+      "mcp__claude_ai_Supabase__restore_project",
+      "Bash(npx expo *)",
+      "Bash(Select-String -Pattern \"scripts\" -Context 0,10)"
+    ]
+  }
+}
