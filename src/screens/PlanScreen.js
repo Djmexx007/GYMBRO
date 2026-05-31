@@ -29,8 +29,9 @@ import {
   getFavorites, toggleFavorite,
 } from '../storage/storage';
 import { PPL_PLAN, ARNOLD_PLAN, CUSTOM_PLAN } from '../data/defaultPlans';
-import { getPrimary, getSecondary, getConflictingExercises, getConflictMuscles, muscleCounts } from '../data/muscleGroups';
+import { HIGH_LEVEL_GROUPS, analyzeDayMuscles } from '../data/muscleGroups';
 import WorkoutGeneratorModal from './WorkoutGeneratorModal';
+import { exportPlanToExcel } from '../lib/exportPlan';
 
 const DAYS_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 const DAYS_FULL  = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -45,6 +46,92 @@ const PLAN_TYPES = [
 const TEMPLATES = { ppl: PPL_PLAN, arnold: ARNOLD_PLAN, custom: CUSTOM_PLAN };
 
 function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+const STATUS_STYLE = {
+  over:    { bg: 'rgba(239,68,68,0.12)',    border: 'rgba(239,68,68,0.3)',    text: '#EF4444' },
+  good:    { bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)',    text: '#22C55E' },
+  under:   { bg: 'rgba(245,158,11,0.12)',   border: 'rgba(245,158,11,0.3)',   text: '#F59E0B' },
+  bonus:   { bg: 'rgba(148,163,184,0.08)',  border: 'rgba(148,163,184,0.15)', text: '#64748B' },
+};
+
+const GROUP_STATUS_ICON = { good: '✓', over: '!', partial: '~' };
+const GROUP_STATUS_COLOR = { good: '#22C55E', over: '#EF4444', partial: '#F59E0B' };
+
+function MuscleAnalysisPanel({ analysis }) {
+  const targeted = Object.entries(analysis).filter(([, g]) => g.isTargeted);
+  const bonus    = Object.entries(analysis).filter(([, g]) => !g.isTargeted && g.hasAnyHit);
+
+  if (targeted.length === 0 && bonus.length === 0) return null;
+
+  return (
+    <View style={apStyles.panel}>
+      <Text style={apStyles.sep}>ANALYSE MUSCULAIRE</Text>
+
+      {targeted.map(([name, g]) => {
+        const visibleSubs = g.subDetails.filter(s => s.status !== 'none');
+        const icon  = GROUP_STATUS_ICON[g.groupStatus];
+        const iColor = GROUP_STATUS_COLOR[g.groupStatus];
+        return (
+          <View key={name} style={apStyles.group}>
+            <View style={apStyles.groupHdr}>
+              <Text style={apStyles.groupName}>{g.icon} {name}</Text>
+              {icon && <Text style={[apStyles.groupStatus, { color: iColor }]}>{icon}</Text>}
+            </View>
+            <View style={apStyles.subRow}>
+              {g.subDetails.map(s => {
+                if (s.status === 'none') return null;
+                const cs = STATUS_STYLE[s.status];
+                return (
+                  <View key={s.name} style={[apStyles.subChip, { backgroundColor: cs.bg, borderColor: cs.border }]}>
+                    <Text style={[apStyles.subChipTxt, { color: cs.text }]}>
+                      {s.shortName}{s.count > 0 ? ` ×${s.count}` : ''}
+                    </Text>
+                  </View>
+                );
+              })}
+              {visibleSubs.length === 0 && g.subDetails.map(s => (
+                <View key={s.name} style={[apStyles.subChip, { backgroundColor: STATUS_STYLE.under.bg, borderColor: STATUS_STYLE.under.border }]}>
+                  <Text style={[apStyles.subChipTxt, { color: STATUS_STYLE.under.text }]}>{s.shortName}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      })}
+
+      {bonus.length > 0 && (
+        <>
+          <Text style={[apStyles.sep, { marginTop: 6 }]}>AUSSI SOLLICITÉ</Text>
+          <View style={apStyles.bonusRow}>
+            {bonus.map(([name, g]) => {
+              const total = g.subDetails.reduce((acc, s) => acc + s.count, 0);
+              return (
+                <View key={name} style={apStyles.bonusChip}>
+                  <Text style={apStyles.bonusChipTxt}>{g.icon} {name} ×{total}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+const apStyles = StyleSheet.create({
+  panel:      { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#242424' },
+  sep:        { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.2, marginBottom: 10 },
+  group:      { marginBottom: 12 },
+  groupHdr:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  groupName:  { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
+  groupStatus:{ fontSize: 13, fontWeight: '900' },
+  subRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  subChip:    { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
+  subChipTxt: { fontSize: 10, fontWeight: '700' },
+  bonusRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  bonusChip:  { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: '#2A2A2A', backgroundColor: '#1A1A1A' },
+  bonusChipTxt:{ fontSize: 10, fontWeight: '600', color: '#484848' },
+});
 
 export default function PlanScreen() {
   const [plan,        setPlan]        = useState(null);
@@ -91,6 +178,27 @@ export default function PlanScreen() {
     const next = deepCopy(plan);
     next.days[dayIdx].exercises = [...clipboard];
     setPlan(next);
+  }
+
+  function toggleTarget(dayIdx, groupName) {
+    const next = deepCopy(plan);
+    const day  = next.days[dayIdx];
+    if (!day.targetMuscles) day.targetMuscles = [];
+    const idx = day.targetMuscles.indexOf(groupName);
+    if (idx === -1) day.targetMuscles.push(groupName);
+    else day.targetMuscles.splice(idx, 1);
+    setPlan(next);
+  }
+
+  function handleExport() {
+    if (!plan) return;
+    exportPlanToExcel({
+      planName: plan.name,
+      planType: plan.type,
+      userName: userNameRef.current,
+      mode:     planMode,
+      days:     plan.days,
+    });
   }
 
   useFocusEffect(useCallback(() => {
@@ -345,12 +453,18 @@ export default function PlanScreen() {
             {plan.name} · {isSync ? '🤝 sync' : '🔒 solo'} · sauvegarde auto
           </Text>
         </View>
-        {isSync && (
-          <TouchableOpacity style={styles.copyBtn} onPress={copyToSolo} activeOpacity={0.8}>
-            <Ionicons name="copy-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.copyBtnTxt}>Copier en Solo</Text>
+        <View style={styles.headerActions}>
+          {isSync && (
+            <TouchableOpacity style={styles.copyBtn} onPress={copyToSolo} activeOpacity={0.8}>
+              <Ionicons name="copy-outline" size={15} color={colors.textMuted} />
+              <Text style={styles.copyBtnTxt}>Copier en Solo</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.copyBtn} onPress={handleExport} activeOpacity={0.8}>
+            <Ionicons name="download-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.copyBtnTxt}>Exporter</Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -413,11 +527,8 @@ export default function PlanScreen() {
           const count    = dayData.exercises.length;
           const isEditingThis = editingDay === dayIdx;
 
-          // Muscle count strip data (only computed when expanded)
-          const counts = expanded ? muscleCounts(dayData.exercises) : new Map();
-          const muscleEntries = expanded
-            ? [...counts.entries()].sort((a, b) => b[1] - a[1])
-            : [];
+          const targets  = dayData.targetMuscles ?? [];
+          const analysis = expanded ? analyzeDayMuscles(dayData.exercises, targets) : null;
 
           return (
             <View key={dayIdx} style={[styles.dayCard, isToday && styles.dayCardToday]}>
@@ -471,59 +582,61 @@ export default function PlanScreen() {
 
               {expanded && !isEditingThis && (
                 <View style={styles.exList}>
-                  {/* Muscle count strip */}
-                  {muscleEntries.length > 0 && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-                      <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 2 }}>
-                        {muscleEntries.map(([muscle, cnt]) => {
-                          const chipStyle = cnt >= 3
-                            ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.3)', text: '#EF4444' }
-                            : cnt === 2
-                            ? { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.3)', text: '#F59E0B' }
-                            : { bg: '#1A1A1A', border: '#242424', text: '#484848' };
-                          return (
-                            <View key={muscle} style={[styles.muscleCountChip, { backgroundColor: chipStyle.bg, borderColor: chipStyle.border }]}>
-                              <Text style={[styles.muscleCountText, { color: chipStyle.text }]}>{muscle} ×{cnt}</Text>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </ScrollView>
-                  )}
 
+                  {/* ── Chips cibles musculaires ── */}
+                  <View style={styles.targetSection}>
+                    <Text style={styles.targetLabel}>CIBLER</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
+                        const on = targets.includes(groupName);
+                        return (
+                          <TouchableOpacity
+                            key={groupName}
+                            style={[
+                              styles.targetChip,
+                              on && { backgroundColor: g.color + '22', borderColor: g.color },
+                            ]}
+                            onPress={() => toggleTarget(dayIdx, groupName)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={styles.targetChipIcon}>{g.icon}</Text>
+                            <Text style={[styles.targetChipTxt, on && { color: g.color }]}>{groupName}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+
+                  {/* ── Liste d'exercices ── */}
                   {dayData.exercises.length === 0 ? (
                     <Text style={styles.emptyDay}>Aucun exercice — repos ou ajoutes-en</Text>
                   ) : (
-                    dayData.exercises.map((ex, exIdx) => {
-                      const conflictMuscles = getConflictMuscles(ex, dayData.exercises);
-                      const hasConflict = conflictMuscles.length > 0;
-
-                      return (
-                        <View key={exIdx} style={styles.exRow}>
-                          <View style={styles.exNum}><Text style={styles.exNumTxt}>{exIdx + 1}</Text></View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.exName}>{ex}</Text>
-                            {hasConflict && (
-                              <Text style={styles.conflictHint}>⚡ {conflictMuscles.join(' · ')}</Text>
-                            )}
-                          </View>
-                          {favorites.includes(ex) && (
-                            <Ionicons name="star" size={13} color={colors.primary} />
-                          )}
-                          <TouchableOpacity
-                            onPress={() => removeExercise(dayIdx, exIdx)}
-                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          >
-                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })
+                    dayData.exercises.map((ex, exIdx) => (
+                      <View key={exIdx} style={styles.exRow}>
+                        <View style={styles.exNum}><Text style={styles.exNumTxt}>{exIdx + 1}</Text></View>
+                        <Text style={[styles.exName, { flex: 1 }]}>{ex}</Text>
+                        {favorites.includes(ex) && (
+                          <Ionicons name="star" size={13} color={colors.primary} />
+                        )}
+                        <TouchableOpacity
+                          onPress={() => removeExercise(dayIdx, exIdx)}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    ))
                   )}
+
                   <TouchableOpacity style={styles.addExBtn} onPress={() => openAdd(dayIdx)}>
                     <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
                     <Text style={styles.addExTxt}>Ajouter un exercice</Text>
                   </TouchableOpacity>
+
+                  {/* ── Panneau analyse musculaire ── */}
+                  {analysis && (targets.length > 0 || dayData.exercises.length > 0) && (
+                    <MuscleAnalysisPanel analysis={analysis} />
+                  )}
                 </View>
               )}
             </View>
@@ -606,7 +719,8 @@ export default function PlanScreen() {
 
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: colors.bg },
-  header:      { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 22, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  header:      { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 22, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 },
+  headerActions: { alignItems: 'flex-end', gap: 6, marginTop: 8 },
   title:       { fontSize: 34, fontWeight: '900', color: colors.text, marginBottom: 2, letterSpacing: -0.5 },
   subtitle:    { fontSize: 13, color: colors.primary, fontWeight: '600' },
   copyBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginTop: 8 },
@@ -650,22 +764,19 @@ const styles = StyleSheet.create({
   // Exercise list
   exList:   { paddingHorizontal: 14, paddingBottom: 14 },
   emptyDay: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: 10, fontStyle: 'italic' },
-  exRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border },
-  exNum:    { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.surfaceElevated, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  exRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border },
+  exNum:    { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.surfaceElevated, alignItems: 'center', justifyContent: 'center' },
   exNumTxt: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   exName:   { fontSize: 15, fontWeight: '600', color: colors.text },
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 4 },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
-  // Muscle count strip
-  muscleCountChip: {
-    borderRadius: 10, borderWidth: 1,
-    paddingHorizontal: 9, paddingVertical: 4,
-  },
-  muscleCountText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
-
-  // Conflict hint
-  conflictHint: { fontSize: 10, color: '#EF4444', fontWeight: '600', marginTop: 2 },
+  // Target muscle chips
+  targetSection: { marginBottom: 14 },
+  targetLabel:   { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 8 },
+  targetChip:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated, marginRight: 7 },
+  targetChipIcon:{ fontSize: 13 },
+  targetChipTxt: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
 
   // Modal
   modalBg:    { flex: 1 },

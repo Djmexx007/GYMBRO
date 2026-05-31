@@ -5,12 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as XLSX from 'xlsx';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import { colors } from '../theme';
 import { getExerciseLibrary } from '../storage/storage';
 import { DEFAULT_LIBRARY } from '../data/defaultPlans';
+import { exportPlanToExcel } from '../lib/exportPlan';
 
 // ── Exercise pools by goal ─────────────────────────────────────────────────────
 
@@ -182,59 +180,6 @@ function generatePlan(days, goal, equipment) {
 
 // ── Excel export ───────────────────────────────────────────────────────────────
 
-async function exportToExcel(plan, goal, equipment) {
-  try {
-    const wb = XLSX.utils.book_new();
-
-    // Cover sheet
-    const infoRows = [
-      ['Programme GymWorkout'],
-      [],
-      ['Objectif', goal === 'force' ? 'Force' : goal === 'hypertrophie' ? 'Hypertrophie' : 'Endurance'],
-      ['Équipement', equipment === 'full' ? 'Salle complète' : equipment === 'dumbbells' ? 'Haltères' : 'Barre'],
-      ['Jours / semaine', plan.length],
-      ['Généré le', new Date().toLocaleDateString('fr-CA')],
-    ];
-    const infoWs = XLSX.utils.aoa_to_sheet(infoRows);
-    infoWs['!cols'] = [{ wch: 20 }, { wch: 30 }];
-    XLSX.utils.book_append_sheet(wb, infoWs, 'Info');
-
-    // One sheet per day
-    plan.forEach(day => {
-      const schemeRow = day.scheme
-        ? [`Sets: ${day.scheme.sets}   Reps: ${day.scheme.reps}   Repos: ${day.scheme.rest}`]
-        : [];
-      const rows = [
-        [day.label],
-        ...schemeRow,
-        [],
-        ['#', 'Exercice', 'Sets', 'Reps', 'Poids (lbs)', 'Notes'],
-        ...day.exercises.map((ex, i) => [i + 1, ex, day.scheme?.sets ?? '', day.scheme?.reps ?? '', '', '']),
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 6 }, { wch: 10 }, { wch: 12 }, { wch: 20 }];
-      // Short label for sheet name (max 31 chars)
-      const sheetName = day.label.replace(/[^\w\s—]/g, '').slice(0, 28).trim();
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    });
-
-    const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-    const uri = FileSystem.cacheDirectory + 'programme_gym.xlsx';
-    await FileSystem.writeAsStringAsync(uri, wbout, { encoding: FileSystem.EncodingType.Base64 });
-
-    const canShare = await Sharing.isAvailableAsync();
-    if (canShare) {
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        dialogTitle: 'Exporter le programme',
-      });
-    } else {
-      Alert.alert('Export', `Fichier sauvegardé : ${uri}`);
-    }
-  } catch (e) {
-    Alert.alert('Erreur export', e?.message ?? 'Impossible d\'exporter le fichier.');
-  }
-}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -343,8 +288,16 @@ export default function WorkoutGeneratorModal({ visible, onClose }) {
       scheme: null,
     }));
     if (!planToExport?.length) return;
+    const goalLabel  = goal === 'force' ? 'Force' : goal === 'hypertrophie' ? 'Hypertrophie' : 'Endurance';
+    const equipLabel = equipment === 'full' ? 'Salle complète' : equipment === 'dumbbells' ? 'Haltères' : 'Barre';
     setExporting(true);
-    await exportToExcel(planToExport, goal, equipment);
+    await exportPlanToExcel({
+      planName: `Programme ${goalLabel}`,
+      planType: `${goalLabel} · ${equipLabel}`,
+      userName: '',
+      mode:     'solo',
+      days:     planToExport,
+    });
     setExporting(false);
   }
 

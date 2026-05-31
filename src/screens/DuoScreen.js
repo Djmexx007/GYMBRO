@@ -9,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { getAllUsersLogs, getUserName, saveSession, clearAllUsersLogs, insertRawCloud } from '../storage/storage';
 import { supabase } from '../lib/supabase';
-import { emitConfetti } from '../lib/confettiEvents';
 import { WORKOUT_SPLIT } from '../data/workoutPlan';
 import { FRIEND_BESTS } from '../data/mockDuo';
 
@@ -282,28 +281,15 @@ export default function DuoScreen() {
     tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 2000);
   }
 
-  async function runDev(label, fn, withConfetti = false) {
+  async function runDev(label, fn) {
     setDevLog('⏳ En cours…'); setDevExtra('');
     try {
       const result = await fn();
       Vibration.vibrate([0, 40, 60, 40]);
       setDevLog(result ?? `✅ ${label} done!`);
-      if (withConfetti) await fireConfettiAll();
     } catch (e) {
       setDevLog(`❌ Erreur : ${e.message}`);
     }
-  }
-
-  // ── Confetti ────────────────────────────────────────────────────────────────
-
-  async function fireConfettiAll() {
-    emitConfetti();
-    try {
-      const ts = new Date().toISOString();
-      await supabase.from('shared_plans').upsert({
-        id: 'confetti', plan: {}, updated_by: 'confetti', updated_at: ts,
-      });
-    } catch {}
   }
 
   async function fireReloadAll() {
@@ -640,12 +626,6 @@ export default function DuoScreen() {
 
               <Text style={styles.devCat}>🎭 SOCIAL & INUTILE</Text>
 
-              <DevBtn color="#002a00" icon="🎉" label="Confettis sur tous les phones"
-                sub="Lance une célébration sur tous les appareils connectés"
-                onPress={() => runDev('Confettis', async () => {
-                  await fireConfettiAll();
-                  return '🎉 Confettis envoyés ! Tout le monde fête quelque chose.';
-                })} />
 
               <DevBtn color="#0a0a2a" icon="🔮" label="Fortune du jour"
                 sub="La vérité sur ton prochain entraînement"
