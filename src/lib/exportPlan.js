@@ -5,10 +5,13 @@ import { Alert } from 'react-native';
 
 const DAYS_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 
-// days = [{ label, exercises, targetMuscles? }]  (index 0–6, index = day of week)
+// days = [{ label, exercises, targetMuscles?, scheme? }]
+// Pour un plan 7 jours (PlanScreen) : index = jour de la semaine → DIM/LUN/MAR...
+// Pour un plan généré (N jours) : J1/J2/J3...
 export async function exportPlanToExcel({ planName = 'Mon Plan', planType = '', userName = '', mode = 'solo', days = [] }) {
   try {
     const wb = XLSX.utils.book_new();
+    const isWeekPlan = days.length === 7;
 
     // ── Feuille 1 : Résumé ──────────────────────────────────────────────────
     const modeLabel = mode === 'sync' ? 'Sync (partagé)' : 'Solo (local)';
@@ -30,10 +33,10 @@ export async function exportPlanToExcel({ planName = 'Mon Plan', planType = '', 
     ];
 
     days.forEach((day, idx) => {
-      const dayShort   = DAYS_SHORT[idx] ?? `J${idx + 1}`;
-      const focus      = day.label || dayShort;
-      const muscles    = (day.targetMuscles ?? []).join(' · ') || '—';
-      const nbEx       = (day.exercises ?? []).length;
+      const dayShort = isWeekPlan ? (DAYS_SHORT[idx] ?? `J${idx + 1}`) : `J${idx + 1}`;
+      const focus    = day.label || dayShort;
+      const muscles  = (day.targetMuscles ?? []).join(' · ') || '—';
+      const nbEx     = (day.exercises ?? []).length;
       summaryRows.push([dayShort, focus, nbEx === 0 ? 'Repos' : muscles, nbEx === 0 ? '—' : nbEx]);
     });
 
@@ -43,33 +46,37 @@ export async function exportPlanToExcel({ planName = 'Mon Plan', planType = '', 
 
     // ── Feuilles par jour ───────────────────────────────────────────────────
     days.forEach((day, idx) => {
-      const dayShort   = DAYS_SHORT[idx] ?? `J${idx + 1}`;
-      const dayLabel   = day.label || dayShort;
-      const exercises  = day.exercises ?? [];
-      const targets    = (day.targetMuscles ?? []).join(' · ');
-      const isRest     = exercises.length === 0;
+      const dayShort  = isWeekPlan ? (DAYS_SHORT[idx] ?? `J${idx + 1}`) : `J${idx + 1}`;
+      const dayLabel  = day.label || dayShort;
+      const exercises = day.exercises ?? [];
+      const targets   = (day.targetMuscles ?? []).join(' · ');
+      const scheme    = day.scheme ?? null;
+      const isRest    = exercises.length === 0;
 
       const rows = [
         [`${dayShort} — ${dayLabel.toUpperCase()}`],
         [targets ? `Muscles ciblés : ${targets}` : isRest ? 'Jour de repos' : 'Aucun groupe ciblé'],
-        [],
-        ['#', 'EXERCICE', 'SETS', 'REPS', 'POIDS (lbs)', 'NOTES'],
       ];
+
+      if (scheme?.sets) {
+        rows.push([`Schéma : ${scheme.sets} sets × ${scheme.reps} reps · Repos : ${scheme.rest}`]);
+      }
+
+      rows.push([]);
+      rows.push(['#', 'EXERCICE', 'SETS', 'REPS', 'POIDS (lbs)', 'NOTES']);
 
       if (isRest) {
         rows.push(['', 'Repos / Récupération active', '', '', '', '']);
       } else {
         exercises.forEach((ex, i) => {
-          rows.push([i + 1, ex, '', '', '', '']);
+          rows.push([i + 1, ex, scheme?.sets ?? '', scheme?.reps ?? '', '', '']);
         });
-        // 3 lignes vides pour ajouter des notes libres
         rows.push([], [], []);
       }
 
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws['!cols'] = [{ wch: 4 }, { wch: 32 }, { wch: 7 }, { wch: 12 }, { wch: 13 }, { wch: 28 }];
 
-      // Nom de l'onglet : "LUN — Push" tronqué à 31 chars (limite Excel)
       const sheetName = `${dayShort} — ${dayLabel}`.replace(/[:\\\/?*\[\]]/g, '').slice(0, 31);
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     });

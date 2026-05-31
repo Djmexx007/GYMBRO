@@ -183,7 +183,7 @@ function generatePlan(days, goal, equipment) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-const EMPTY_DAY = (n) => ({ label: `Jour ${n}`, exercises: [], input: '' });
+const EMPTY_DAY = (n) => ({ label: `Jour ${n}`, exercises: [], input: '', sets: '4', reps: '8–12', rest: '60–90 s' });
 
 export default function WorkoutGeneratorModal({ visible, onClose }) {
   // Mode
@@ -236,6 +236,10 @@ export default function WorkoutGeneratorModal({ visible, onClose }) {
     setManualDays(prev => prev.map((d, idx) => idx === i ? { ...d, input: text } : d));
   }
 
+  function updateDayScheme(i, field, value) {
+    setManualDays(prev => prev.map((d, idx) => idx === i ? { ...d, [field]: value } : d));
+  }
+
   function addExerciseToDay(i) {
     setManualDays(prev => prev.map((d, idx) => {
       if (idx !== i) return d;
@@ -283,9 +287,9 @@ export default function WorkoutGeneratorModal({ visible, onClose }) {
 
   async function handleExport() {
     const planToExport = mode === 'auto' ? generated : manualDays.map(d => ({
-      label: d.label,
+      label:     d.label,
       exercises: d.exercises,
-      scheme: null,
+      scheme:    { sets: d.sets || '', reps: d.reps || '', rest: d.rest || '' },
     }));
     if (!planToExport?.length) return;
     const goalLabel  = goal === 'force' ? 'Force' : goal === 'hypertrophie' ? 'Hypertrophie' : 'Endurance';
@@ -461,6 +465,44 @@ export default function WorkoutGeneratorModal({ visible, onClose }) {
                         <Ionicons name="trash-outline" size={16} color="#EF4444" />
                       </TouchableOpacity>
                     )}
+                  </View>
+
+                  {/* Scheme : sets / reps / repos */}
+                  <View style={styles.schemeRow}>
+                    <View style={{ flex: 1 }}>
+                      <TextInput
+                        style={styles.schemeInput}
+                        value={day.sets}
+                        onChangeText={v => updateDayScheme(i, 'sets', v)}
+                        placeholder="4"
+                        placeholderTextColor="#484848"
+                        keyboardType="numeric"
+                        returnKeyType="done"
+                      />
+                      <Text style={styles.schemeLabel}>SETS</Text>
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <TextInput
+                        style={styles.schemeInput}
+                        value={day.reps}
+                        onChangeText={v => updateDayScheme(i, 'reps', v)}
+                        placeholder="8–12"
+                        placeholderTextColor="#484848"
+                        returnKeyType="done"
+                      />
+                      <Text style={styles.schemeLabel}>REPS</Text>
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <TextInput
+                        style={styles.schemeInput}
+                        value={day.rest}
+                        onChangeText={v => updateDayScheme(i, 'rest', v)}
+                        placeholder="60–90 s"
+                        placeholderTextColor="#484848"
+                        returnKeyType="done"
+                      />
+                      <Text style={styles.schemeLabel}>REPOS</Text>
+                    </View>
                   </View>
 
                   {/* Exercise list */}
@@ -659,6 +701,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,107,0,0.06)', marginTop: 4,
   },
   addDayTxt: { fontSize: 14, fontWeight: '700', color: '#FF6B00' },
+
+  // Scheme inputs (manual mode)
+  schemeRow:   { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  schemeInput: { backgroundColor: '#1A1A1A', borderRadius: 10, borderWidth: 1, borderColor: '#2A2A2A', paddingHorizontal: 10, paddingVertical: 9, fontSize: 13, color: '#FFFFFF', textAlign: 'center' },
+  schemeLabel: { fontSize: 9, fontWeight: '800', color: '#484848', textAlign: 'center', marginTop: 4, letterSpacing: 0.8 },
 
   // Suggestions
   suggestionList: {
