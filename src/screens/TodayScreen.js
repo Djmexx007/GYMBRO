@@ -32,10 +32,11 @@ export default function TodayScreen({ navigation }) {
         getSharedPlan(),
       ]);
 
-      setSharedPlan(cloud);
+      const cloudPlan = cloud?.plan ?? null;
+      setSharedPlan(cloudPlan);
       setSource(src);
 
-      const effectivePlan = (src === 'shared' && cloud) ? cloud : plan;
+      const effectivePlan = (src === 'shared' && cloudPlan) ? cloudPlan : plan;
       applyPlan(effectivePlan);
     }
 
@@ -57,8 +58,9 @@ export default function TodayScreen({ navigation }) {
 
     if (newSrc === 'shared') {
       setLoadingSync(true);
-      const cloud = await getSharedPlan();
+      const cloudResult = await getSharedPlan();
       setLoadingSync(false);
+      const cloud = cloudResult?.plan ?? null;
       setSharedPlan(cloud);
       if (cloud?.days?.[dayIdx]) {
         setToday(cloud.days[dayIdx]);
@@ -75,7 +77,11 @@ export default function TodayScreen({ navigation }) {
     }
   }
 
-  if (!today) return null;
+  if (!today) return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  );
 
   const isRest = today.exercises.length === 0;
   const isShared = source === 'shared';
@@ -170,83 +176,88 @@ export default function TodayScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: '#080808' },
   header: {
-    paddingHorizontal: 22,
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 18,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#242424',
   },
-  dayLabel: { fontSize: 12, fontWeight: '800', color: colors.primary, letterSpacing: 2, marginBottom: 4 },
-  title: { fontSize: 34, fontWeight: '900', color: colors.text, marginBottom: 10, letterSpacing: -0.5 },
-  musclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  dayLabel: { fontSize: 12, fontWeight: '800', color: '#FF6B00', letterSpacing: 2, marginBottom: 4 },
+  title: { fontSize: 38, fontWeight: '900', color: '#FFFFFF', marginBottom: 12, letterSpacing: -1 },
+  musclesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   muscleChip: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
   },
-  muscleText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  muscleText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 
   // Source toggle
   sourceRow: { flexDirection: 'row', gap: 8 },
   sourceBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 8, borderRadius: 10,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    paddingVertical: 9, borderRadius: 18,
+    backgroundColor: '#111111', borderWidth: 1, borderColor: '#242424',
   },
-  sourceBtnActive:     { backgroundColor: colors.primary, borderColor: colors.primary },
+  sourceBtnActive:     { backgroundColor: '#FF6B00', borderColor: '#FF6B00' },
   sourceBtnActiveSync: { backgroundColor: '#00b4d8', borderColor: '#00b4d8' },
-  sourceBtnText:       { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  sourceBtnText:       { fontSize: 12, fontWeight: '700', color: '#484848' },
   sourceBtnTextActive: { color: '#000' },
   noSharedHint: {
-    marginTop: 8, fontSize: 11, color: colors.textMuted,
+    marginTop: 8, fontSize: 11, color: '#484848',
     fontStyle: 'italic', textAlign: 'center',
   },
 
   list: { flex: 1 },
   listContent: { padding: 22, paddingBottom: 12 },
-  sectionLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 14 },
+  sectionLabel: { color: '#484848', fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 14 },
   exerciseRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 18,
+    backgroundColor: '#111111',
+    borderRadius: 22,
+    padding: 20,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
   },
   numCircle: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center', justifyContent: 'center', marginRight: 14,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center', justifyContent: 'center', marginRight: 16,
   },
-  numText: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
-  exerciseName: { color: colors.text, fontSize: 18, fontWeight: '600' },
+  numText: { color: '#999999', fontSize: 13, fontWeight: '700' },
+  exerciseName: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   footer: {
     padding: 22,
-    paddingBottom: 16,
+    paddingBottom: 18,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: '#242424',
   },
   startBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    height: 68,
+    backgroundColor: '#FF6B00',
+    borderRadius: 20,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   startIcon: { marginRight: 10 },
   startText: { color: '#000', fontSize: 19, fontWeight: '900', letterSpacing: 1.5 },
-  startBtnDisabled: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  startTextDisabled: { color: colors.textMuted },
-  restContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
-  restEmoji: { fontSize: 64 },
-  restTitle: { fontSize: 24, fontWeight: '800', color: colors.text },
-  restSub: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  startBtnDisabled: { backgroundColor: '#111111', borderWidth: 1, borderColor: '#242424', shadowOpacity: 0 },
+  startTextDisabled: { color: '#484848' },
+  restContainer: { alignItems: 'center', paddingTop: 72, gap: 16 },
+  restEmoji: { fontSize: 72 },
+  restTitle: { fontSize: 28, fontWeight: '800', color: '#FFFFFF' },
+  restSub: { fontSize: 15, color: '#999999', textAlign: 'center', lineHeight: 22, paddingHorizontal: 24 },
 });

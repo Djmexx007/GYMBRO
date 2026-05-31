@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Modal, Alert, Vibration, DevSettings,
+  TouchableOpacity, Modal, Alert, Vibration, DevSettings, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -28,6 +28,37 @@ function computeBests(logs) {
     }
   });
   return map;
+}
+
+// ── Nouvelles fonctions de calcul ─────────────────────────────────────────────
+
+function computeWeekVolume(logs) {
+  const cutoff = Date.now() - 7 * 86400000;
+  return logs
+    .filter(s => new Date(s.date).getTime() >= cutoff)
+    .reduce((sum, s) => sum + s.weight * s.reps, 0);
+}
+
+function computeStreak(logs) {
+  const days = new Set(logs.map(s => s.date.slice(0, 10)));
+  let streak = 0;
+  const d = new Date();
+  while (true) {
+    const key = d.toISOString().slice(0, 10);
+    if (days.has(key)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function daysSinceLastSession(logs) {
+  if (!logs.length) return null;
+  const latest = Math.max(...logs.map(s => new Date(s.date).getTime()));
+  return Math.floor((Date.now() - latest) / 86400000);
 }
 
 // ── Dev helpers ───────────────────────────────────────────────────────────────
@@ -57,16 +88,16 @@ async function seedFakeHistory() {
 
 async function becomeGoat() {
   const prs = [
-    { exercise: 'Bench Press',       weight: 405, reps: 1 },
-    { exercise: 'Squat',             weight: 900, reps: 1 },
+    { exercise: 'Bench Press',       weight: 405,  reps: 1 },
+    { exercise: 'Squat',             weight: 900,  reps: 1 },
     { exercise: 'Deadlift',          weight: 1000, reps: 1 },
-    { exercise: 'Barbell Row',       weight: 500, reps: 5 },
-    { exercise: 'Pull-ups',          weight: 0,   reps: 50 },
-    { exercise: 'Biceps Curl',       weight: 200, reps: 20 },
-    { exercise: 'Lateral Raises',    weight: 100, reps: 30 },
-    { exercise: 'Shoulder Press',    weight: 350, reps: 5 },
+    { exercise: 'Barbell Row',       weight: 500,  reps: 5 },
+    { exercise: 'Pull-ups',          weight: 0,    reps: 50 },
+    { exercise: 'Biceps Curl',       weight: 200,  reps: 20 },
+    { exercise: 'Lateral Raises',    weight: 100,  reps: 30 },
+    { exercise: 'Shoulder Press',    weight: 350,  reps: 5 },
     { exercise: 'Leg Press',         weight: 2000, reps: 20 },
-    { exercise: 'Triceps Pushdown',  weight: 300, reps: 25 },
+    { exercise: 'Triceps Pushdown',  weight: 300,  reps: 25 },
   ].map(s => ({ ...s, date: new Date().toISOString() }));
   await saveSession(prs);
   return '🐐 Félicitations. Tu es officiellement plus fort que Dieu. Zach peut aller se rhabiller.';
@@ -124,6 +155,13 @@ async function trollZach() {
   return '🤡 Upload complété. Zach vient de soulever 5 lbs au bench. Historiquement pathétique.';
 }
 
+async function resetSharedPlan() {
+  await supabase.from('shared_plans').upsert({
+    id: 'main', plan: {}, updated_by: 'reset', updated_at: new Date().toISOString(),
+  });
+  return '🗑️ Plan partagé réinitialisé. Repartez de zéro sur les deux téléphones.';
+}
+
 const FORTUNES = [
   '🔮 Tu vas PR aujourd\'hui. Les planètes sont alignées avec tes biceps.',
   '🔮 Quelqu\'un te regarde soulever. Impressionne-les ou rentre chez toi.',
@@ -177,7 +215,9 @@ const SAIYAN_LEVELS = [
 export default function DuoScreen() {
   const [myName,   setMyName]   = useState('');
   const [allBests, setAllBests] = useState({});
+  const [allLogs,  setAllLogs]  = useState({});
   const [loading,  setLoading]  = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Dev panel
   const tapCount  = useRef(0);
@@ -185,7 +225,8 @@ export default function DuoScreen() {
   const [devVisible,  setDevVisible]  = useState(false);
   const [devLog,      setDevLog]      = useState('');
   const [devExtra,    setDevExtra]    = useState('');
-  const channelRef = useRef(null);
+  const channelRef  = useRef(null);
+  const lastLoadRef = useRef(null);
 
   // ── Reload channel ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -199,19 +240,32 @@ export default function DuoScreen() {
 
   // ── Data ───────────────────────────────────────────────────────────────────
 
+  async function load() {
+    const now = Date.now();
+    if (lastLoadRef.current && now - lastLoadRef.current < 30 * 1000) return;
+    setLoading(true);
+    const name = await getUserName();
+    setMyName(name ?? 'Moi');
+    const byUser = await getAllUsersLogs();
+    setAllLogs(byUser);
+    const bests = {};
+    Object.keys(byUser).forEach(u => { bests[u] = computeBests(byUser[u]); });
+    setAllBests(bests);
+    lastLoadRef.current = Date.now();
+    setLoading(false);
+  }
+
   useFocusEffect(useCallback(() => {
-    async function load() {
-      setLoading(true);
-      const name = await getUserName();
-      setMyName(name ?? 'Moi');
-      const byUser = await getAllUsersLogs();
-      const bests = {};
-      Object.keys(byUser).forEach(u => { bests[u] = computeBests(byUser[u]); });
-      setAllBests(bests);
-      setLoading(false);
-    }
     load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    lastLoadRef.current = null;
+    await load();
+    setRefreshing(false);
+  }
 
   // ── Dev panel ──────────────────────────────────────────────────────────────
 
@@ -243,7 +297,7 @@ export default function DuoScreen() {
   // ── Confetti ────────────────────────────────────────────────────────────────
 
   async function fireConfettiAll() {
-    emitConfetti(); // local immédiat via App.js (fonctionne sur tous les OS)
+    emitConfetti();
     try {
       const ts = new Date().toISOString();
       await supabase.from('shared_plans').upsert({
@@ -267,6 +321,16 @@ export default function DuoScreen() {
   const rival      = otherUsers[0] ?? null;
   const rivalBests = rival ? allBests[rival] : {};
 
+  const myLogs     = allLogs[myName] ?? [];
+  const rivalLogs  = rival ? (allLogs[rival] ?? []) : [];
+
+  const myWeekVol     = computeWeekVolume(myLogs);
+  const rivalWeekVol  = computeWeekVolume(rivalLogs);
+  const myStreak      = computeStreak(myLogs);
+  const rivalStreak   = computeStreak(rivalLogs);
+  const myLastDays    = daysSinceLastSession(myLogs);
+  const rivalLastDays = daysSinceLastSession(rivalLogs);
+
   const sharedExercises = rival ? Object.keys(myBests).filter(ex => rivalBests[ex]) : [];
 
   let myWins = 0, rivalWins = 0;
@@ -277,19 +341,20 @@ export default function DuoScreen() {
   });
 
   const overallMsg =
-    !rival                      ? null :
+    !rival                       ? null :
     sharedExercises.length === 0 ? 'Pas encore de données communes' :
-    myWins > rivalWins           ? `${myName} domine 💪` :
-    rivalWins > myWins           ? `${rival} domine 💪` :
+    myWins > rivalWins            ? `${myName} domine 💪` :
+    rivalWins > myWins            ? `${rival} domine 💪` :
     'Match nul 🤝';
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
-          <Text style={styles.title}>Duo</Text>
+          <Text style={styles.title}>DUO</Text>
         </TouchableOpacity>
         <Text style={styles.subtitle}>
           {rival ? `${myName} vs ${rival}` : 'En attente du coéquipier…'}
@@ -298,14 +363,26 @@ export default function DuoScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text style={styles.loadingText}>Chargement du cloud…</Text>
         </View>
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#FF6B00"
+              colors={['#FF6B00']}
+            />
+          }
+        >
           {!rival ? (
             <View style={styles.empty}>
-              <Ionicons name="people-outline" size={64} color={colors.textMuted} />
+              <Ionicons name="people-outline" size={64} color="#484848" />
               <Text style={styles.emptyTitle}>En attente</Text>
               <Text style={styles.emptyText}>
                 Ton coéquipier doit ouvrir l'app et enregistrer une séance pour apparaître ici.
@@ -313,6 +390,118 @@ export default function DuoScreen() {
             </View>
           ) : (
             <>
+              {/* ── Bloc Compétition ─────────────────────────────────────── */}
+
+              {/* Section A — Volume semaine */}
+              <View style={styles.compCard}>
+                <View style={styles.compHeader}>
+                  <Ionicons name="barbell-outline" size={14} color="#484848" />
+                  <Text style={styles.compTitle}>VOLUME SEMAINE</Text>
+                </View>
+                <View style={styles.compRow}>
+                  <View style={styles.compCol}>
+                    <Text style={[styles.compVal, myWeekVol >= rivalWeekVol && styles.compValWin]}>
+                      {myWeekVol >= 1000
+                        ? `${(myWeekVol / 1000).toFixed(1)}k`
+                        : String(Math.round(myWeekVol))}
+                    </Text>
+                    <Text style={styles.compUnit}>KG TOTAL</Text>
+                    <Text style={styles.compName}>{myName.toUpperCase()}</Text>
+                    {myWeekVol >= rivalWeekVol && myWeekVol > 0 && (
+                      <View style={styles.winnerBadge}>
+                        <Text style={styles.winnerText}>LEADER</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.compDivider} />
+                  <View style={styles.compCol}>
+                    <Text style={[styles.compVal, rivalWeekVol > myWeekVol && styles.compValWin]}>
+                      {rivalWeekVol >= 1000
+                        ? `${(rivalWeekVol / 1000).toFixed(1)}k`
+                        : String(Math.round(rivalWeekVol))}
+                    </Text>
+                    <Text style={styles.compUnit}>KG TOTAL</Text>
+                    <Text style={styles.compName}>{rival.toUpperCase()}</Text>
+                    {rivalWeekVol > myWeekVol && (
+                      <View style={styles.winnerBadge}>
+                        <Text style={styles.winnerText}>LEADER</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* Section B — Streak */}
+              <View style={styles.compCard}>
+                <View style={styles.compHeader}>
+                  <Text style={{ fontSize: 14 }}>🔥</Text>
+                  <Text style={styles.compTitle}>STREAK</Text>
+                </View>
+                <View style={styles.compRow}>
+                  <View style={styles.compCol}>
+                    <Text style={[styles.compVal, myStreak >= rivalStreak && myStreak > 0 && styles.compValWin]}>
+                      {myStreak}
+                    </Text>
+                    <Text style={styles.compUnit}>JOUR{myStreak !== 1 ? 'S' : ''} CONSÉCUTIF{myStreak !== 1 ? 'S' : ''}</Text>
+                    <Text style={styles.compName}>{myName.toUpperCase()}</Text>
+                    {myStreak > rivalStreak && myStreak > 0 && (
+                      <View style={styles.winnerBadge}>
+                        <Text style={styles.winnerText}>EN FEU</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.compDivider} />
+                  <View style={styles.compCol}>
+                    <Text style={[styles.compVal, rivalStreak > myStreak && styles.compValWin]}>
+                      {rivalStreak}
+                    </Text>
+                    <Text style={styles.compUnit}>JOUR{rivalStreak !== 1 ? 'S' : ''} CONSÉCUTIF{rivalStreak !== 1 ? 'S' : ''}</Text>
+                    <Text style={styles.compName}>{rival.toUpperCase()}</Text>
+                    {rivalStreak > myStreak && rivalStreak > 0 && (
+                      <View style={styles.winnerBadge}>
+                        <Text style={styles.winnerText}>EN FEU</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* Section C — Dernière séance */}
+              <View style={[styles.compCard, { marginBottom: 20 }]}>
+                <View style={styles.compHeader}>
+                  <Ionicons name="time-outline" size={14} color="#484848" />
+                  <Text style={styles.compTitle}>DERNIÈRE SÉANCE</Text>
+                </View>
+                <View style={styles.compRow}>
+                  <View style={styles.compCol}>
+                    <Text style={[
+                      styles.compVal,
+                      myLastDays !== null && (rivalLastDays === null || myLastDays <= rivalLastDays) && styles.compValWin,
+                    ]}>
+                      {myLastDays === null ? '—' : myLastDays === 0 ? 'Auj.' : `J-${myLastDays}`}
+                    </Text>
+                    <Text style={styles.compUnit}>
+                      {myLastDays === null ? 'PAS DE DONNÉES' : myLastDays === 0 ? 'AUJOURD\'HUI' : `IL Y A ${myLastDays} JOUR${myLastDays !== 1 ? 'S' : ''}`}
+                    </Text>
+                    <Text style={styles.compName}>{myName.toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.compDivider} />
+                  <View style={styles.compCol}>
+                    <Text style={[
+                      styles.compVal,
+                      rivalLastDays !== null && (myLastDays === null || rivalLastDays <= myLastDays) && styles.compValWin,
+                    ]}>
+                      {rivalLastDays === null ? '—' : rivalLastDays === 0 ? 'Auj.' : `J-${rivalLastDays}`}
+                    </Text>
+                    <Text style={styles.compUnit}>
+                      {rivalLastDays === null ? 'PAS DE DONNÉES' : rivalLastDays === 0 ? 'AUJOURD\'HUI' : `IL Y A ${rivalLastDays} JOUR${rivalLastDays !== 1 ? 'S' : ''}`}
+                    </Text>
+                    <Text style={styles.compName}>{rival.toUpperCase()}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* ── Scoreboard ────────────────────────────────────────────── */}
               {sharedExercises.length > 0 && (
                 <View style={styles.scoreboard}>
                   <View style={styles.scoreCol}>
@@ -330,6 +519,7 @@ export default function DuoScreen() {
                 </View>
               )}
 
+              {/* ── Exercise cards ────────────────────────────────────────── */}
               {sharedExercises.length === 0 ? (
                 <View style={styles.empty}>
                   <Text style={styles.emptyTitle}>Pas encore de données communes</Text>
@@ -366,6 +556,7 @@ export default function DuoScreen() {
                 </>
               )}
 
+              {/* ── Exercices en attente — moi seulement ─────────────────── */}
               {(() => {
                 const myOnly = Object.keys(myBests).filter(ex => !rivalBests[ex]);
                 if (myOnly.length === 0) return null;
@@ -382,6 +573,7 @@ export default function DuoScreen() {
                 );
               })()}
 
+              {/* ── Exercices en attente — rival seulement ───────────────── */}
               {(() => {
                 const rivalOnly = Object.keys(rivalBests).filter(ex => !myBests[ex]);
                 if (rivalOnly.length === 0) return null;
@@ -524,6 +716,10 @@ export default function DuoScreen() {
 
               <Text style={styles.devCat}>☢️ DANGER ZONE</Text>
 
+              <DevBtn color="#1a1000" icon="🗑️" label="Reset plan partagé"
+                sub="Remet le plan partagé à zéro sur les deux téléphones"
+                onPress={() => runDev('ResetPlan', resetSharedPlan)} />
+
               <DevBtn color="#3a0000" icon="☢️" label="Nuclear Reset — TOUT effacer"
                 sub="Supprime TOI + ZACH du cloud. Irréversible à jamais."
                 onPress={() => runDev('Nuclear', () => new Promise(resolve => {
@@ -566,56 +762,75 @@ function DevBtn({ color, icon, label, sub, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: colors.bg },
-  header:      { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
-  title:       { fontSize: 34, fontWeight: '900', color: colors.text, marginBottom: 2, letterSpacing: -0.5 },
-  subtitle:    { fontSize: 14, color: colors.primary, fontWeight: '600' },
-  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  loadingText: { color: colors.textSecondary, fontSize: 14 },
-  scroll:        { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 24 },
-  empty:      { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
-  emptyText:  { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
+  container: { flex: 1, backgroundColor: '#080808' },
+  header: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: '#242424' },
+  title: { fontSize: 38, fontWeight: '900', color: '#FFFFFF', letterSpacing: -1, marginBottom: 2 },
+  subtitle: { fontSize: 13, color: '#FF6B00', fontWeight: '600', letterSpacing: 0.3 },
 
-  scoreboard:  { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, marginBottom: 22, overflow: 'hidden' },
-  scoreCol:    { flex: 1, alignItems: 'center', paddingVertical: 18 },
-  scoreMiddle: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
-  scoreName:   { fontSize: 11, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 6 },
-  scoreNum:    { fontSize: 48, fontWeight: '900', color: colors.text },
-  scoreNumWin: { color: colors.primary },
-  scoreVS:     { color: colors.textMuted, fontSize: 12, fontWeight: '800', letterSpacing: 1, marginBottom: 4 },
-  overallMsg:  { color: colors.text, fontSize: 11, fontWeight: '700', textAlign: 'center', maxWidth: 70, lineHeight: 15 },
+  // Competition block
+  compCard: { backgroundColor: '#111111', borderRadius: 22, borderWidth: 1, borderColor: '#242424', marginBottom: 14, overflow: 'hidden' },
+  compHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  compTitle: { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.5 },
+  compRow: { flexDirection: 'row', padding: 16, gap: 12 },
+  compCol: { flex: 1, alignItems: 'center', gap: 4 },
+  compVal: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
+  compValWin: { color: '#FF6B00' },
+  compName: { fontSize: 9, fontWeight: '800', color: '#484848', letterSpacing: 1 },
+  compUnit: { fontSize: 10, color: '#484848', fontWeight: '600' },
+  compDivider: { width: 1, backgroundColor: '#1a1a1a', alignSelf: 'stretch' },
+  winnerBadge: { backgroundColor: 'rgba(255,107,0,0.12)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  winnerText: { fontSize: 9, fontWeight: '900', color: '#FF6B00', letterSpacing: 1 },
 
-  sectionLabel:  { color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 12 },
-  compareCard:   { backgroundColor: colors.surface, borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
-  compareEx:     { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 10 },
-  compareRow:    { flexDirection: 'row', gap: 8 },
-  compareBox:    { flex: 1, backgroundColor: colors.surfaceElevated, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border },
-  compareBoxWin: { borderColor: colors.primary, backgroundColor: '#140E00' },
-  compareName:   { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1, marginBottom: 6 },
-  compareMain:   { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 2 },
-  compare1RM:    { fontSize: 11, color: colors.textSecondary, marginBottom: 8 },
-  winChip:       { alignSelf: 'flex-start', backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  winChipText:   { color: '#000', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  // Scoreboard
+  scoreboard: { flexDirection: 'row', backgroundColor: '#111111', borderRadius: 22, borderWidth: 1, borderColor: '#242424', marginBottom: 16, overflow: 'hidden' },
+  scoreCol: { flex: 1, alignItems: 'center', paddingVertical: 20 },
+  scoreMiddle: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#1a1a1a' },
+  scoreName: { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.2, marginBottom: 8 },
+  scoreNum: { fontSize: 52, fontWeight: '900', color: '#FFFFFF' },
+  scoreNumWin: { color: '#FF6B00' },
+  scoreVS: { color: '#484848', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
+  overallMsg: { color: '#FFFFFF', fontSize: 10, fontWeight: '700', textAlign: 'center', maxWidth: 72, lineHeight: 14 },
 
-  pendingSection: { marginTop: 8, backgroundColor: colors.surface, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
-  pendingRow:     { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  pendingEx:      { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  pendingVal:     { color: colors.textSecondary, fontSize: 12 },
+  // Exercise cards
+  sectionLabel: { color: '#484848', fontSize: 10, fontWeight: '800', letterSpacing: 1.8, marginBottom: 10, marginTop: 4 },
+  compareCard: { backgroundColor: '#111111', borderRadius: 20, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#242424' },
+  compareEx: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 12 },
+  compareRow: { flexDirection: 'row', gap: 10 },
+  compareBox: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#242424' },
+  compareBoxWin: { borderColor: '#FF6B00', backgroundColor: 'rgba(255,107,0,0.06)' },
+  compareName: { fontSize: 9, fontWeight: '800', color: '#484848', letterSpacing: 1, marginBottom: 6 },
+  compareMain: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', marginBottom: 2 },
+  compare1RM: { fontSize: 11, color: '#999999', marginBottom: 8 },
+  winChip: { alignSelf: 'flex-start', backgroundColor: '#FF6B00', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  winChipText: { color: '#000', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+
+  // Empty & pending
+  empty: { alignItems: 'center', paddingTop: 80, gap: 14 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+  emptyText: { fontSize: 14, color: '#999999', textAlign: 'center', lineHeight: 21, paddingHorizontal: 24 },
+  pendingSection: { marginTop: 6, backgroundColor: '#111111', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#242424', marginBottom: 10 },
+  pendingRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
+  pendingEx: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  pendingVal: { color: '#999999', fontSize: 12 },
+
+  // Scroll
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 32 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  loadingText: { color: '#999999', fontSize: 14 },
 
   // Dev panel
   devOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'flex-end' },
   devPanel:    { backgroundColor: '#0d0d0d', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36, borderTopWidth: 1, borderColor: '#222', maxHeight: '93%' },
   devTitleRow: { marginBottom: 12 },
-  devTitle:    { fontSize: 24, fontWeight: '900', color: colors.text, marginBottom: 2 },
-  devSubtitle: { fontSize: 11, color: colors.textMuted, letterSpacing: 0.5 },
+  devTitle:    { fontSize: 24, fontWeight: '900', color: '#FFFFFF', marginBottom: 2 },
+  devSubtitle: { fontSize: 11, color: '#484848', letterSpacing: 0.5 },
   devLog:      { fontSize: 13, color: '#4ade80', marginBottom: 8, fontWeight: '600', lineHeight: 20, backgroundColor: '#0a1a0a', borderRadius: 10, padding: 10 },
   devExtra:    { fontSize: 14, color: '#a78bfa', marginBottom: 10, fontWeight: '700', fontStyle: 'italic' },
   devCat:      { fontSize: 10, fontWeight: '800', color: '#444', letterSpacing: 2, marginTop: 14, marginBottom: 8, textTransform: 'uppercase' },
   devBtn:      { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 13, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#1a1a1a' },
   devBtnIcon:  { fontSize: 26, width: 32, textAlign: 'center' },
-  devBtnLabel: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  devBtnLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginBottom: 2 },
   devBtnSub:   { color: '#555', fontSize: 11 },
   devClose:    { marginTop: 12, alignItems: 'center', paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: '#222', backgroundColor: '#111' },
   devCloseTxt: { color: '#444', fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },

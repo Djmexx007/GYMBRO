@@ -8,17 +8,18 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import TodayScreen    from './src/screens/TodayScreen';
-import WorkoutSession from './src/screens/WorkoutSession';
-import ProgressScreen from './src/screens/ProgressScreen';
-import DuoScreen      from './src/screens/DuoScreen';
-import PlanScreen     from './src/screens/PlanScreen';
-import MetricsScreen  from './src/screens/MetricsScreen';
-import PhotosScreen   from './src/screens/PhotosScreen';
-import IdentityScreen from './src/screens/IdentityScreen';
+import TodayScreen           from './src/screens/TodayScreen';
+import WorkoutSession        from './src/screens/WorkoutSession';
+import ProgressScreen        from './src/screens/ProgressScreen';
+import DuoScreen             from './src/screens/DuoScreen';
+import PlanScreen            from './src/screens/PlanScreen';
+import MetricsScreen         from './src/screens/MetricsScreen';
+import PhotosScreen          from './src/screens/PhotosScreen';
+import IdentityScreen        from './src/screens/IdentityScreen';
+import WorkoutGeneratorModal from './src/screens/WorkoutGeneratorModal';
 import { colors } from './src/theme';
 import { supabase } from './src/lib/supabase';
 import { addConfettiListener } from './src/lib/confettiEvents';
@@ -116,26 +117,57 @@ function TodayStack() {
 }
 
 function MainTabs() {
+  const planTapCount = useRef(0);
+  const planTapTimer = useRef(null);
+  const [showGenerator, setShowGenerator] = useState(false);
+  const insets = useSafeAreaInsets();
+
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 6 },
-        tabBarActiveTintColor:   colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name={TAB_ICONS[route.name]} size={size} color={color} />
-        ),
-      })}
-    >
-      <Tab.Screen name="Today"    component={TodayStack} />
-      <Tab.Screen name="Progress" component={ProgressScreen} />
-      <Tab.Screen name="Duo"      component={DuoScreen} />
-      <Tab.Screen name="Plan"     component={PlanScreen} />
-      <Tab.Screen name="Metrics"  component={MetricsScreen} />
-      <Tab.Screen name="Photos"   component={PhotosScreen} />
-    </Tab.Navigator>
+    <>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            paddingTop: 8,
+            paddingBottom: insets.bottom || 8,
+            height: 60 + (insets.bottom || 0),
+          },
+          tabBarActiveTintColor:   colors.primary,
+          tabBarInactiveTintColor: colors.textMuted,
+          tabBarLabelStyle: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2, paddingBottom: 4 },
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={TAB_ICONS[route.name]} size={22} color={color} />
+          ),
+        })}
+      >
+        <Tab.Screen name="Today"    component={TodayStack} />
+        <Tab.Screen name="Progress" component={ProgressScreen} />
+        <Tab.Screen name="Duo"      component={DuoScreen} />
+        <Tab.Screen
+          name="Plan"
+          component={PlanScreen}
+          listeners={{
+            tabPress: () => {
+              planTapCount.current += 1;
+              if (planTapTimer.current) clearTimeout(planTapTimer.current);
+              if (planTapCount.current >= 3) {
+                planTapCount.current = 0;
+                Vibration.vibrate(80);
+                setShowGenerator(true);
+              }
+              planTapTimer.current = setTimeout(() => { planTapCount.current = 0; }, 800);
+            },
+          }}
+        />
+        <Tab.Screen name="Metrics"  component={MetricsScreen} />
+        <Tab.Screen name="Photos"   component={PhotosScreen} />
+      </Tab.Navigator>
+
+      <WorkoutGeneratorModal visible={showGenerator} onClose={() => setShowGenerator(false)} />
+    </>
   );
 }
 

@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "Gym Duo Tracker",
+    "owner": "theraven458",
     "slug": "gym-duo-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,12 +23,14 @@
     ],
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "com.gymduotracker.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Accès à ta caméra pour prendre des photos de progression.",
         "NSPhotoLibraryUsageDescription": "Accès à tes photos pour ton journal de progression."
       }
     },
     "android": {
+      "package": "com.gymduotracker.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
@@ -36,12 +39,17 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7fa74c3d-8c2d-4118-b889-8637a120d3f6"
     },
     "extra": {
       "eas": {

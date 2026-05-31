@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { saveSession } from '../storage/storage';
+import { getPrimary, getSecondary } from '../data/muscleGroups';
+
+const DRAFT_KEY = '@gym_session_draft';
 
 export default function WorkoutSession({ navigation, route }) {
   const { exercises, label } = route.params;
@@ -25,6 +29,23 @@ export default function WorkoutSession({ navigation, route }) {
   const [showSummary, setShowSummary] = useState(false);
 
   const repsInputRef = useRef(null);
+
+  // Draft recovery — si l'app a fermé pendant une séance, proposer de reprendre
+  useEffect(() => {
+    AsyncStorage.getItem(DRAFT_KEY).then(raw => {
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft?.sets?.length) return;
+      Alert.alert(
+        '💪 Séance non terminée',
+        `${draft.sets.length} set${draft.sets.length > 1 ? 's' : ''} enregistré${draft.sets.length > 1 ? 's' : ''} avant la fermeture. Reprendre ?`,
+        [
+          { text: 'Ignorer', style: 'cancel', onPress: () => AsyncStorage.removeItem(DRAFT_KEY) },
+          { text: 'Reprendre', onPress: () => setSessionSets(draft.sets) },
+        ]
+      );
+    }).catch(() => {});
+  }, []);
 
   const currentExercise = exercises[currentIndex];
   const currentExerciseSets = sessionSets.filter(s => s.exercise === currentExercise);
@@ -43,7 +64,11 @@ export default function WorkoutSession({ navigation, route }) {
       reps: r,
       date: new Date().toISOString(),
     };
-    setSessionSets(prev => [...prev, newSet]);
+    setSessionSets(prev => {
+      const next = [...prev, newSet];
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ sets: next })).catch(() => {});
+      return next;
+    });
     setReps('');
     repsInputRef.current?.focus();
   }
@@ -68,6 +93,7 @@ export default function WorkoutSession({ navigation, route }) {
       return;
     }
     await saveSession(sessionSets);
+    await AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
     setShowSummary(true);
   }
 
@@ -164,8 +190,27 @@ export default function WorkoutSession({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Exercise name */}
+          {/* Exercise name + muscles */}
           <Text style={styles.exerciseName}>{currentExercise}</Text>
+          {(() => {
+            const primaries = getPrimary(currentExercise);
+            const secondaries = getSecondary(currentExercise);
+            if (!primaries.length && !secondaries.length) return null;
+            return (
+              <View style={styles.muscleRow}>
+                {primaries.map(m => (
+                  <View key={m} style={styles.musclePrimary}>
+                    <Text style={styles.musclePrimaryText}>{m}</Text>
+                  </View>
+                ))}
+                {secondaries.map(m => (
+                  <View key={m} style={styles.muscleSecondary}>
+                    <Text style={styles.muscleSecondaryText}>{m}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
           {/* Live set log */}
           {currentExerciseSets.length > 0 && (
@@ -273,7 +318,7 @@ export default function WorkoutSession({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: '#080808',
   },
 
   // Top bar
@@ -282,33 +327,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#242424',
   },
   topCenter: {
     alignItems: 'center',
   },
   topProgress: {
-    color: colors.primary,
+    color: '#FF6B00',
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   topLabel: {
-    color: colors.textSecondary,
+    color: '#999999',
     fontSize: 11,
     marginTop: 1,
   },
   finishBtn: {
     borderWidth: 1,
-    borderColor: colors.danger,
+    borderColor: '#EF4444',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   finishBtnText: {
-    color: colors.danger,
+    color: '#EF4444',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -320,54 +365,67 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   exerciseName: {
-    fontSize: 38,
+    fontSize: 42,
     fontWeight: '900',
-    color: colors.text,
-    marginBottom: 22,
-    lineHeight: 44,
-    letterSpacing: -0.5,
+    color: '#FFFFFF',
+    marginBottom: 10,
+    lineHeight: 50,
+    letterSpacing: -1,
   },
+  muscleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 18 },
+  musclePrimary: {
+    backgroundColor: 'rgba(255,107,0,0.10)', borderRadius: 10,
+    borderWidth: 1, borderColor: 'rgba(255,107,0,0.25)',
+    paddingHorizontal: 9, paddingVertical: 3,
+  },
+  musclePrimaryText: { fontSize: 10, fontWeight: '700', color: '#FF8C00', letterSpacing: 0.2 },
+  muscleSecondary: {
+    backgroundColor: '#1A1A1A', borderRadius: 10,
+    borderWidth: 1, borderColor: '#242424',
+    paddingHorizontal: 9, paddingVertical: 3,
+  },
+  muscleSecondaryText: { fontSize: 10, fontWeight: '600', color: '#484848' },
 
   // Sets log
   setsLog: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
+    backgroundColor: '#111111',
+    borderRadius: 20,
     paddingHorizontal: 14,
     marginBottom: 22,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
   },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   setRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#242424',
   },
   setNum: {
     width: 52,
-    color: colors.textMuted,
+    color: '#484848',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   setVal: {
     flex: 1,
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
   },
 
   // Inputs
   inputCard: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: 18,
+    backgroundColor: '#111111',
+    borderRadius: 24,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
     overflow: 'hidden',
   },
   inputGroup: {
@@ -376,19 +434,19 @@ const styles = StyleSheet.create({
   },
   inputDivider: {
     width: 1,
-    backgroundColor: colors.border,
+    backgroundColor: '#242424',
     marginVertical: 14,
   },
   inputLabel: {
-    color: colors.textMuted,
+    color: '#484848',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.2,
     marginBottom: 8,
   },
   inputField: {
-    color: colors.text,
-    fontSize: 44,
+    color: '#FFFFFF',
+    fontSize: 48,
     fontWeight: '800',
     padding: 0,
     includeFontPadding: false,
@@ -396,32 +454,37 @@ const styles = StyleSheet.create({
 
   // Buttons
   saveSetBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    height: 76,
+    backgroundColor: '#FF6B00',
+    borderRadius: 22,
+    height: 80,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
   },
   saveSetText: {
     color: '#000',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 3,
   },
   nextBtn: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 14,
-    height: 58,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 18,
+    height: 62,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
     marginBottom: 28,
   },
   nextBtnText: {
-    color: colors.text,
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -435,25 +498,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dot: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#111111',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
   },
   dotActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: '#FF6B00',
+    borderColor: '#FF6B00',
   },
   dotDone: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
+    backgroundColor: '#22C55E',
+    borderColor: '#22C55E',
   },
   dotText: {
-    color: colors.textMuted,
+    color: '#484848',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -474,13 +537,13 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 38,
     fontWeight: '900',
-    color: colors.text,
+    color: '#FFFFFF',
     letterSpacing: 2,
     marginBottom: 6,
   },
   summaryLabel: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: '#999999',
     marginBottom: 30,
   },
   statsRow: {
@@ -491,28 +554,28 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    paddingVertical: 16,
+    backgroundColor: '#111111',
+    borderRadius: 20,
+    paddingVertical: 18,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
   },
   statValue: {
     fontSize: 26,
     fontWeight: '900',
-    color: colors.primary,
+    color: '#FF6B00',
     marginBottom: 4,
   },
   statKey: {
     fontSize: 9,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: '#484848',
     letterSpacing: 0.8,
     textAlign: 'center',
   },
   sectionLabel: {
-    color: colors.textMuted,
+    color: '#484848',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.5,
@@ -520,32 +583,37 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   summaryExRow: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: '#111111',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#242424',
     width: '100%',
   },
   summaryExName: {
-    color: colors.text,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 4,
   },
   summaryExDetail: {
-    color: colors.textSecondary,
+    color: '#999999',
     fontSize: 13,
   },
   doneBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    height: 68,
+    backgroundColor: '#FF6B00',
+    borderRadius: 22,
+    height: 80,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 16,
+    shadowColor: '#FF6B00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
   },
   doneBtnText: {
     color: '#000',

@@ -70,7 +70,8 @@ export async function getAllUsersLogs() {
     const { data, error } = await supabase
       .from('workout_logs')
       .select('user_name, exercise, weight, reps, logged_at')
-      .order('logged_at', { ascending: false });
+      .order('logged_at', { ascending: false })
+      .limit(1000);
 
     if (error || !data) return {};
 
@@ -234,11 +235,11 @@ export async function getSharedPlan() {
   try {
     const { data, error } = await supabase
       .from('shared_plans')
-      .select('plan')
+      .select('plan, updated_at, updated_by')
       .eq('id', 'main')
       .single();
     if (error || !data || !data.plan || Object.keys(data.plan).length === 0) return null;
-    return data.plan;
+    return { plan: data.plan, updatedAt: data.updated_at, updatedBy: data.updated_by };
   } catch { return null; }
 }
 

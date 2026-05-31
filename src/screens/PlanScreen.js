@@ -12,11 +12,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
+import { supabase } from '../lib/supabase';
 import {
   getActivePlan, saveActivePlan,
   getSoloPlanByType, saveSoloPlanByType,
@@ -27,6 +29,8 @@ import {
   getFavorites, toggleFavorite,
 } from '../storage/storage';
 import { PPL_PLAN, ARNOLD_PLAN, CUSTOM_PLAN } from '../data/defaultPlans';
+import { getPrimary, getSecondary, getConflictingExercises, getConflictMuscles, muscleCounts } from '../data/muscleGroups';
+import WorkoutGeneratorModal from './WorkoutGeneratorModal';
 
 const DAYS_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 const DAYS_FULL  = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -55,8 +59,39 @@ export default function PlanScreen() {
   const [editingDay,  setEditingDay]  = useState(null);
   const [editLabel,   setEditLabel]   = useState('');
 
-  const savedRef    = useRef(null);
-  const userNameRef = useRef('');
+  const [clipboard,     setClipboard]     = useState(null);
+  const [showGenerator, setShowGenerator] = useState(false);
+
+  const savedRef       = useRef(null);
+  const userNameRef    = useRef('');
+  const pollRef        = useRef(null);
+  const lastSyncAt     = useRef(null);
+  const titleTapCount  = useRef(0);
+  const titleTapTimer  = useRef(null);
+
+  // Polling sync 15s
+  useEffect(() => {
+    if (planMode !== 'sync') { if (pollRef.current) clearInterval(pollRef.current); return; }
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data } = await supabase.from('shared_plans').select('plan, updated_at, updated_by').eq('id', 'main').single();
+        if (!data?.plan || !data.updated_at) return;
+        if (data.updated_at === lastSyncAt.current) return;
+        if (data.updated_by === userNameRef.current) return;
+        lastSyncAt.current = data.updated_at;
+        setPlan(data.plan);
+      } catch {}
+    }, 15000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [planMode]);
+
+  function copyDay(dayIdx) { setClipboard([...(plan.days[dayIdx]?.exercises ?? [])]); }
+  function pasteDay(dayIdx) {
+    if (!clipboard) return;
+    const next = deepCopy(plan);
+    next.days[dayIdx].exercises = [...clipboard];
+    setPlan(next);
+  }
 
   useFocusEffect(useCallback(() => {
     async function load() {
@@ -70,8 +105,9 @@ export default function PlanScreen() {
       let activePlan;
       if (mode === 'sync') {
         setSyncing(true);
-        const cloudPlan = await getSharedPlan();
+        const cloudResult = await getSharedPlan();
         setSyncing(false);
+        const cloudPlan = cloudResult?.plan ?? null;
         // Sync ne se rabat jamais sur le plan Solo — template par défaut si cloud vide
         activePlan = cloudPlan ?? deepCopy(PPL_PLAN);
       } else {
@@ -121,12 +157,12 @@ export default function PlanScreen() {
               await savePlanMode('sync');
               setPlanMode('sync');
               setSyncing(true);
-              const cloudPlan = await getSharedPlan();
+              const cloudResult = await getSharedPlan();
               setSyncing(false);
+              const cloudPlan = cloudResult?.plan ?? null;
               if (cloudPlan) {
                 const copy = deepCopy(cloudPlan);
                 savedRef.current = JSON.stringify(copy);
-                savePlanByType(copy.type, copy);
                 setPlan(copy);
               } else if (plan) {
                 saveSharedPlan(plan, userNameRef.current);
@@ -297,7 +333,14 @@ export default function PlanScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Plan</Text>
+          <TouchableOpacity activeOpacity={1} onPress={() => {
+            titleTapCount.current += 1;
+            if (titleTapTimer.current) clearTimeout(titleTapTimer.current);
+            if (titleTapCount.current >= 3) { titleTapCount.current = 0; Vibration.vibrate(80); setShowGenerator(true); }
+            titleTapTimer.current = setTimeout(() => { titleTapCount.current = 0; }, 800);
+          }}>
+            <Text style={styles.title}>Plan</Text>
+          </TouchableOpacity>
           <Text style={styles.subtitle}>
             {plan.name} · {isSync ? '🤝 sync' : '🔒 solo'} · sauvegarde auto
           </Text>
@@ -370,6 +413,12 @@ export default function PlanScreen() {
           const count    = dayData.exercises.length;
           const isEditingThis = editingDay === dayIdx;
 
+          // Muscle count strip data (only computed when expanded)
+          const counts = expanded ? muscleCounts(dayData.exercises) : new Map();
+          const muscleEntries = expanded
+            ? [...counts.entries()].sort((a, b) => b[1] - a[1])
+            : [];
+
           return (
             <View key={dayIdx} style={[styles.dayCard, isToday && styles.dayCardToday]}>
               <TouchableOpacity
@@ -422,24 +471,54 @@ export default function PlanScreen() {
 
               {expanded && !isEditingThis && (
                 <View style={styles.exList}>
+                  {/* Muscle count strip */}
+                  {muscleEntries.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                      <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 2 }}>
+                        {muscleEntries.map(([muscle, cnt]) => {
+                          const chipStyle = cnt >= 3
+                            ? { bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.3)', text: '#EF4444' }
+                            : cnt === 2
+                            ? { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.3)', text: '#F59E0B' }
+                            : { bg: '#1A1A1A', border: '#242424', text: '#484848' };
+                          return (
+                            <View key={muscle} style={[styles.muscleCountChip, { backgroundColor: chipStyle.bg, borderColor: chipStyle.border }]}>
+                              <Text style={[styles.muscleCountText, { color: chipStyle.text }]}>{muscle} ×{cnt}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
+                  )}
+
                   {dayData.exercises.length === 0 ? (
                     <Text style={styles.emptyDay}>Aucun exercice — repos ou ajoutes-en</Text>
                   ) : (
-                    dayData.exercises.map((ex, exIdx) => (
-                      <View key={exIdx} style={styles.exRow}>
-                        <View style={styles.exNum}><Text style={styles.exNumTxt}>{exIdx + 1}</Text></View>
-                        <Text style={styles.exName}>{ex}</Text>
-                        {favorites.includes(ex) && (
-                          <Ionicons name="star" size={13} color={colors.primary} />
-                        )}
-                        <TouchableOpacity
-                          onPress={() => removeExercise(dayIdx, exIdx)}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        >
-                          <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                        </TouchableOpacity>
-                      </View>
-                    ))
+                    dayData.exercises.map((ex, exIdx) => {
+                      const conflictMuscles = getConflictMuscles(ex, dayData.exercises);
+                      const hasConflict = conflictMuscles.length > 0;
+
+                      return (
+                        <View key={exIdx} style={styles.exRow}>
+                          <View style={styles.exNum}><Text style={styles.exNumTxt}>{exIdx + 1}</Text></View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.exName}>{ex}</Text>
+                            {hasConflict && (
+                              <Text style={styles.conflictHint}>⚡ {conflictMuscles.join(' · ')}</Text>
+                            )}
+                          </View>
+                          {favorites.includes(ex) && (
+                            <Ionicons name="star" size={13} color={colors.primary} />
+                          )}
+                          <TouchableOpacity
+                            onPress={() => removeExercise(dayIdx, exIdx)}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          >
+                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })
                   )}
                   <TouchableOpacity style={styles.addExBtn} onPress={() => openAdd(dayIdx)}>
                     <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
@@ -519,6 +598,8 @@ export default function PlanScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <WorkoutGeneratorModal visible={showGenerator} onClose={() => setShowGenerator(false)} />
     </SafeAreaView>
   );
 }
@@ -569,12 +650,22 @@ const styles = StyleSheet.create({
   // Exercise list
   exList:   { paddingHorizontal: 14, paddingBottom: 14 },
   emptyDay: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: 10, fontStyle: 'italic' },
-  exRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border },
-  exNum:    { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.surfaceElevated, alignItems: 'center', justifyContent: 'center' },
+  exRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border },
+  exNum:    { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.surfaceElevated, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   exNumTxt: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
-  exName:   { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+  exName:   { fontSize: 15, fontWeight: '600', color: colors.text },
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 4 },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+
+  // Muscle count strip
+  muscleCountChip: {
+    borderRadius: 10, borderWidth: 1,
+    paddingHorizontal: 9, paddingVertical: 4,
+  },
+  muscleCountText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+
+  // Conflict hint
+  conflictHint: { fontSize: 10, color: '#EF4444', fontWeight: '600', marginTop: 2 },
 
   // Modal
   modalBg:    { flex: 1 },

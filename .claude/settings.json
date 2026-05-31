@@ -17,7 +17,10 @@
       "PowerShell(npx expo whoami 2>&1)",
       "mcp__claude_ai_Supabase__restore_project",
       "Bash(npx expo *)",
-      "Bash(Select-String -Pattern \"scripts\" -Context 0,10)"
+      "Bash(Select-String -Pattern \"scripts\" -Context 0,10)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(eas update *)"
     ]
   }
 }
