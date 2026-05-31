@@ -19,7 +19,8 @@
           "photosPermission": "Accès à tes photos pour ton journal de progression.",
           "cameraPermission": "Accès à ta caméra pour prendre des photos de progression."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": false,
