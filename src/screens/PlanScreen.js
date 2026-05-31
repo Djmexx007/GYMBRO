@@ -84,7 +84,7 @@ function MuscleAnalysisPanel({ analysis }) {
                 return (
                   <View key={s.name} style={[apStyles.subChip, { backgroundColor: cs.bg, borderColor: cs.border }]}>
                     <Text style={[apStyles.subChipTxt, { color: cs.text }]}>
-                      {s.shortName}{s.count > 0 ? ` ×${s.count}` : ''}
+                      {s.shortName}{s.load > 0 ? ` ×${s.load % 1 === 0 ? s.load : s.load.toFixed(1)}` : ''}
                     </Text>
                   </View>
                 );
@@ -104,7 +104,7 @@ function MuscleAnalysisPanel({ analysis }) {
           <Text style={[apStyles.sep, { marginTop: 6 }]}>AUSSI SOLLICITÉ</Text>
           <View style={apStyles.bonusRow}>
             {bonus.map(([name, g]) => {
-              const total = g.subDetails.reduce((acc, s) => acc + s.count, 0);
+              const total = g.subDetails.reduce((acc, s) => acc + s.load, 0);
               return (
                 <View key={name} style={apStyles.bonusChip}>
                   <Text style={apStyles.bonusChipTxt}>{g.icon} {name} ×{total}</Text>
