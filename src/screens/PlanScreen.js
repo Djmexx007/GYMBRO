@@ -482,8 +482,7 @@ export default function PlanScreen() {
 
   function openSubMuscleDetail(muscleName, dayIdx) {
     const groupName = Object.entries(HIGH_LEVEL_GROUPS)
-      .find(([, g]) => g.subMuscles.includes(muscleName))?.[0];
-    if (!groupName) return;
+      .find(([, g]) => g.subMuscles.includes(muscleName))?.[0] ?? '';
     setMuscleModal({ groupName, dayIdx });
     setSubMuscleView(muscleName);
   }
@@ -813,24 +812,23 @@ export default function PlanScreen() {
                       <Text style={styles.analysisTitle}>ANALYSE MUSCULAIRE</Text>
                       {muscleAnalysisItems.map(item => {
                         const emoji = { 'Surentraîné': '🔴', 'Optimal': '🟢', 'Sous-entraîné': '🟠', 'Absent': '⚫' }[item.st.label] ?? '⚫';
-                        const tappable = item.load > 0;
                         return (
                           <TouchableOpacity
                             key={item.name}
                             style={styles.analysisRow}
-                            onPress={() => tappable ? openSubMuscleDetail(item.name, dayIdx) : null}
-                            activeOpacity={tappable ? 0.65 : 1}
-                            disabled={!tappable}
+                            onPress={() => openSubMuscleDetail(item.name, dayIdx)}
+                            activeOpacity={0.65}
                           >
                             <Text style={styles.analysisEmoji}>{emoji}</Text>
                             <Text style={[styles.analysisName, !tappable && { color: '#3A3A3A' }]}>
                               {item.name}
                             </Text>
-                            {item.load > 0 && (
-                              <Text style={[styles.analysisLoad, { color: item.st.color }]}>
-                                ×{item.load % 1 === 0 ? item.load : item.load.toFixed(1)}
-                              </Text>
-                            )}
+                            {item.load > 0
+                              ? <Text style={[styles.analysisLoad, { color: item.st.color }]}>
+                                  ×{item.load % 1 === 0 ? item.load : item.load.toFixed(1)}
+                                </Text>
+                              : <Ionicons name="chevron-forward" size={12} color="#2A2A2A" />
+                            }
                           </TouchableOpacity>
                         );
                       })}
