@@ -688,59 +688,66 @@ export default function PlanScreen() {
               {expanded && !isEditingThis && (
                 <View style={styles.exList}>
 
-                  {/* ── Accordion muscles ── */}
-                  <View style={styles.accordion}>
-                    <Text style={styles.accordionTitle}>MUSCLES CIBLÉS</Text>
-                    {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
-                      const on     = targets.includes(groupName);
-                      const expKey = `${dayIdx}::${groupName}`;
-                      const isOpen = expandedGroup === expKey;
+                  {/* ── Muscles ciblés — layout horizontal ── */}
+                  <View style={styles.hMuscle}>
+                    <Text style={styles.hMuscleTitle}>MUSCLES CIBLÉS</Text>
+
+                    {/* Rangée 1 : groupes */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 6, paddingBottom: 10 }}
+                    >
+                      {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
+                        const on     = targets.includes(groupName);
+                        const expKey = `${dayIdx}::${groupName}`;
+                        const isOpen = expandedGroup === expKey;
+                        return (
+                          <TouchableOpacity
+                            key={groupName}
+                            style={[styles.hGroupChip, on && styles.hGroupChipOn, isOpen && styles.hGroupChipOpen]}
+                            onPress={() => {
+                              setExpandedGroup(isOpen ? null : expKey);
+                              if (!on) toggleTarget(dayIdx, groupName);
+                            }}
+                            onLongPress={() => toggleTarget(dayIdx, groupName)}
+                            delayLongPress={400}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.hGroupName, on && styles.hGroupNameOn]}>
+                              {groupName}
+                            </Text>
+                            {on && <View style={styles.hGroupDot} />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Rangée 2 : sous-muscles du groupe ouvert */}
+                    {expandedGroup?.startsWith(`${dayIdx}::`) && (() => {
+                      const gName = expandedGroup.slice(expandedGroup.indexOf('::') + 2);
+                      const gData = HIGH_LEVEL_GROUPS[gName];
+                      const on    = targets.includes(gName);
+                      if (!gData) return null;
                       return (
-                        <View key={groupName} style={styles.accordionBlock}>
-                          <View style={styles.accordionRow}>
-                            {/* Expand chevron + group name */}
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={{ gap: 6, paddingBottom: 4 }}
+                        >
+                          {gData.subMuscles.map(sm => (
                             <TouchableOpacity
-                              style={styles.accordionLeft}
-                              onPress={() => setExpandedGroup(isOpen ? null : expKey)}
+                              key={sm}
+                              style={[styles.hSubChip, on && styles.hSubChipOn]}
+                              onPress={() => openSubMuscleDetail(sm, dayIdx)}
                               activeOpacity={0.7}
                             >
-                              <Ionicons
-                                name={isOpen ? 'chevron-down' : 'chevron-forward'}
-                                size={12}
-                                color={on ? colors.primary : '#3A3A3A'}
-                              />
-                              <Text style={[styles.accordionName, on && styles.accordionNameOn]}>
-                                {groupName}
-                              </Text>
+                              <Text style={[styles.hSubTxt, on && styles.hSubTxtOn]}>{sm}</Text>
                             </TouchableOpacity>
-                            {/* Checkbox toggle */}
-                            <TouchableOpacity
-                              onPress={() => toggleTarget(dayIdx, groupName)}
-                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}
-                            >
-                              <View style={[styles.checkBox, on && styles.checkBoxOn]}>
-                                {on && <Ionicons name="checkmark" size={10} color="#000" />}
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                          {/* Sub-muscle chips */}
-                          {isOpen && (
-                            <View style={styles.subTagRow}>
-                              {g.subMuscles.map(sm => (
-                                <TouchableOpacity
-                                  key={sm}
-                                  style={[styles.subTag, on && styles.subTagOn]}
-                                  onPress={() => openSubMuscleDetail(sm, dayIdx)}
-                                  activeOpacity={0.7}
-                                >
-                                  <Text style={[styles.subTagTxt, on && styles.subTagTxtOn]}>{sm}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          )}
-                        </View>
+                          ))}
+                        </ScrollView>
                       );
-                    })}
+                    })()}
                   </View>
 
                   {/* ── Liste d'exercices ── */}
@@ -996,21 +1003,19 @@ const styles = StyleSheet.create({
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 4 },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
-  // Accordion muscles
-  accordion:        { marginTop: 16, borderTopWidth: 1, borderTopColor: '#1C1C1C', paddingTop: 16 },
-  accordionTitle:   { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 12 },
-  accordionBlock:   { marginBottom: 2 },
-  accordionRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#151515' },
-  accordionLeft:    { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  accordionName:    { fontSize: 14, fontWeight: '600', color: '#3A3A3A' },
-  accordionNameOn:  { color: colors.text },
-  checkBox:         { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' },
-  checkBoxOn:       { backgroundColor: colors.primary, borderColor: colors.primary },
-  subTagRow:        { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 10, paddingLeft: 22 },
-  subTag:           { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#1E1E1E' },
-  subTagOn:         { borderColor: colors.primary + '55', backgroundColor: colors.primaryGlow },
-  subTagTxt:        { fontSize: 11, fontWeight: '500', color: '#444' },
-  subTagTxtOn:      { color: colors.primary },
+  // Muscles ciblés horizontal
+  hMuscle:          { marginTop: 16, borderTopWidth: 1, borderTopColor: '#1C1C1C', paddingTop: 14 },
+  hMuscleTitle:     { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 10 },
+  hGroupChip:       { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#1E1E1E', flexDirection: 'row', alignItems: 'center', gap: 5 },
+  hGroupChipOn:     { borderColor: colors.primary + '55', backgroundColor: colors.primaryGlow },
+  hGroupChipOpen:   { borderColor: colors.primary },
+  hGroupName:       { fontSize: 13, fontWeight: '600', color: '#3A3A3A' },
+  hGroupNameOn:     { color: colors.primary },
+  hGroupDot:        { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.primary },
+  hSubChip:         { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#1E1E1E' },
+  hSubChipOn:       { borderColor: colors.primary + '55', backgroundColor: colors.primaryGlow },
+  hSubTxt:          { fontSize: 12, fontWeight: '500', color: '#444' },
+  hSubTxtOn:        { color: colors.primary },
 
   // Muscle Detail Modal
   detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, paddingBottom: 44, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '85%', flex: 0, paddingTop: 12 },
