@@ -918,19 +918,21 @@ export default function PlanScreen() {
         animationType="slide"
         onRequestClose={closeMuscleModal}
       >
-        <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={closeMuscleModal} />
-        <View style={styles.detailSheet}>
-          <View style={styles.detailHandle} />
+        {/* Fond opaque cliquable */}
+        <View style={styles.detailBg}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeMuscleModal} />
+          <View style={styles.detailSheet}>
+            <View style={styles.detailHandle} />
 
-          {/* Header */}
-          <View style={styles.detailHdr}>
-            <Text style={styles.detailTitle} numberOfLines={1}>{subMuscleView ?? ''}</Text>
-            <TouchableOpacity onPress={closeMuscleModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Ionicons name="close" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
+            {/* Header */}
+            <View style={styles.detailHdr}>
+              <Text style={styles.detailTitle} numberOfLines={1}>{subMuscleView ?? ''}</Text>
+              <TouchableOpacity onPress={closeMuscleModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.detailScroll}>
             {/* ── Volume + statut ── */}
             {(() => {
               const st   = muscleStatus(subMuscleLoad);
@@ -1014,7 +1016,7 @@ export default function PlanScreen() {
                     ))}
                 </View>
               )
-            ) : recommendedExercises.length > 0 && (
+            ) : recommendedExercises.length > 0 ? (
               /* Sous-entraîné ou absent → ajouter */
               <View style={styles.detailSection}>
                 <View style={styles.detailSectionHdr}>
@@ -1035,11 +1037,18 @@ export default function PlanScreen() {
                   </View>
                 ))}
               </View>
+            ) : dayExerciseContributions.length === 0 && (
+              /* Aucune donnée */
+              <View style={styles.detailEmpty}>
+                <Text style={styles.detailEmptyTxt}>Aucun exercice trouvé pour ce muscle.</Text>
+                <Text style={styles.detailEmptyHint}>Ajoutez des exercices à cette séance pour voir l'analyse.</Text>
+              </View>
             )}
 
-            <View style={{ height: 16 }} />
+            <View style={{ height: 24 }} />
           </ScrollView>
-        </View>
+          </View>{/* detailSheet */}
+        </View>{/* detailBg */}
       </Modal>
     </SafeAreaView>
   );
@@ -1121,7 +1130,9 @@ const styles = StyleSheet.create({
   analysisLoad:       { fontSize: 12, fontWeight: '700' },
 
   // Muscle Detail Modal
-  detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, paddingBottom: 44, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '85%', flex: 0, paddingTop: 12 },
+  detailBg:         { flex: 1, justifyContent: 'flex-end' },
+  detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '85%', paddingTop: 12 },
+  detailScroll:     { maxHeight: 520, paddingBottom: 44 },
   detailHandle:     { width: 32, height: 3, backgroundColor: '#2A2A2A', borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
   detailHdr:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
   detailTitle:      { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5, flex: 1 },
@@ -1144,6 +1155,9 @@ const styles = StyleSheet.create({
   detailC:          { fontSize: 12, fontWeight: '700', color: '#3A3A3A', width: 30, textAlign: 'right' },
   addBtn:           { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   removeBtn:        { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
+  detailEmpty:      { paddingVertical: 32, alignItems: 'center', gap: 8 },
+  detailEmptyTxt:   { fontSize: 14, fontWeight: '600', color: '#444', textAlign: 'center' },
+  detailEmptyHint:  { fontSize: 12, color: '#2A2A2A', textAlign: 'center', lineHeight: 18 },
   detailSectionHdr: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   detailSectionSub: { fontSize: 10, color: '#3A3A3A', fontStyle: 'italic' },
 
