@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ import {
   getFavorites, toggleFavorite,
 } from '../storage/storage';
 import { PPL_PLAN, ARNOLD_PLAN, CUSTOM_PLAN } from '../data/defaultPlans';
-import { HIGH_LEVEL_GROUPS, analyzeDayMuscles } from '../data/muscleGroups';
+import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, analyzeDayMuscles } from '../data/muscleGroups';
 import WorkoutGeneratorModal from './WorkoutGeneratorModal';
 import { exportPlanToExcel } from '../lib/exportPlan';
 
@@ -57,7 +57,7 @@ const STATUS_STYLE = {
 const GROUP_STATUS_ICON = { good: '✓', over: '!', partial: '~' };
 const GROUP_STATUS_COLOR = { good: '#22C55E', over: '#EF4444', partial: '#F59E0B' };
 
-function MuscleAnalysisPanel({ analysis }) {
+function MuscleAnalysisPanel({ analysis, onGroupPress, onSubMusclePress }) {
   const targeted = Object.entries(analysis).filter(([, g]) => g.isTargeted);
   const bonus    = Object.entries(analysis).filter(([, g]) => !g.isTargeted && g.hasAnyHit);
 
@@ -69,30 +69,47 @@ function MuscleAnalysisPanel({ analysis }) {
 
       {targeted.map(([name, g]) => {
         const visibleSubs = g.subDetails.filter(s => s.status !== 'none');
-        const icon  = GROUP_STATUS_ICON[g.groupStatus];
+        const icon   = GROUP_STATUS_ICON[g.groupStatus];
         const iColor = GROUP_STATUS_COLOR[g.groupStatus];
         return (
           <View key={name} style={apStyles.group}>
-            <View style={apStyles.groupHdr}>
+            <TouchableOpacity
+              style={apStyles.groupHdr}
+              onPress={() => onGroupPress?.(name)}
+              activeOpacity={0.7}
+            >
               <Text style={apStyles.groupName}>{g.icon} {name}</Text>
-              {icon && <Text style={[apStyles.groupStatus, { color: iColor }]}>{icon}</Text>}
-            </View>
+              <View style={apStyles.groupHdrRight}>
+                {icon && <Text style={[apStyles.groupStatus, { color: iColor }]}>{icon}</Text>}
+                <Ionicons name="chevron-forward" size={13} color="#484848" style={{ marginLeft: 4 }} />
+              </View>
+            </TouchableOpacity>
             <View style={apStyles.subRow}>
               {g.subDetails.map(s => {
                 if (s.status === 'none') return null;
                 const cs = STATUS_STYLE[s.status];
                 return (
-                  <View key={s.name} style={[apStyles.subChip, { backgroundColor: cs.bg, borderColor: cs.border }]}>
+                  <TouchableOpacity
+                    key={s.name}
+                    style={[apStyles.subChip, { backgroundColor: cs.bg, borderColor: cs.border }]}
+                    onPress={() => onSubMusclePress?.(s.name)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={[apStyles.subChipTxt, { color: cs.text }]}>
                       {s.shortName}{s.load > 0 ? ` ×${s.load % 1 === 0 ? s.load : s.load.toFixed(1)}` : ''}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
               {visibleSubs.length === 0 && g.subDetails.map(s => (
-                <View key={s.name} style={[apStyles.subChip, { backgroundColor: STATUS_STYLE.under.bg, borderColor: STATUS_STYLE.under.border }]}>
+                <TouchableOpacity
+                  key={s.name}
+                  style={[apStyles.subChip, { backgroundColor: STATUS_STYLE.under.bg, borderColor: STATUS_STYLE.under.border }]}
+                  onPress={() => onSubMusclePress?.(s.name)}
+                  activeOpacity={0.7}
+                >
                   <Text style={[apStyles.subChipTxt, { color: STATUS_STYLE.under.text }]}>{s.shortName}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
@@ -106,9 +123,14 @@ function MuscleAnalysisPanel({ analysis }) {
             {bonus.map(([name, g]) => {
               const total = g.subDetails.reduce((acc, s) => acc + s.load, 0);
               return (
-                <View key={name} style={apStyles.bonusChip}>
-                  <Text style={apStyles.bonusChipTxt}>{g.icon} {name} ×{total}</Text>
-                </View>
+                <TouchableOpacity
+                  key={name}
+                  style={apStyles.bonusChip}
+                  onPress={() => onGroupPress?.(name)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={apStyles.bonusChipTxt}>{g.icon} {name} ×{total % 1 === 0 ? total : total.toFixed(1)}</Text>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -122,7 +144,8 @@ const apStyles = StyleSheet.create({
   panel:      { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#242424' },
   sep:        { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.2, marginBottom: 10 },
   group:      { marginBottom: 12 },
-  groupHdr:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  groupHdr:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  groupHdrRight:{ flexDirection: 'row', alignItems: 'center' },
   groupName:  { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
   groupStatus:{ fontSize: 13, fontWeight: '900' },
   subRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -148,6 +171,30 @@ export default function PlanScreen() {
 
   const [clipboard,     setClipboard]     = useState(null);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [muscleModal,   setMuscleModal]   = useState(null); // { groupName, dayIdx }
+  const [subMuscleView, setSubMuscleView] = useState(null); // sous-muscle sélectionné
+
+  // Analyse du groupe sélectionné dans le modal (recalculée à chaque changement de plan)
+  const muscleModalGroupData = useMemo(() => {
+    if (!muscleModal || !plan) return null;
+    const dayExs = plan.days[muscleModal.dayIdx]?.exercises ?? [];
+    const analysis = analyzeDayMuscles(dayExs, [muscleModal.groupName]);
+    return analysis[muscleModal.groupName] ?? null;
+  }, [muscleModal, plan]);
+
+  // Exercices primaires et secondaires pour le sous-muscle sélectionné
+  const exercisesForSubMuscle = useMemo(() => {
+    if (!subMuscleView) return [];
+    const primary = [], secondary = [];
+    Object.entries(MUSCLE_GROUPS).forEach(([ex, d]) => {
+      if ((d.primary ?? []).includes(subMuscleView))        primary.push(ex);
+      else if ((d.secondary ?? []).includes(subMuscleView)) secondary.push(ex);
+    });
+    const sections = [];
+    if (primary.length)   sections.push({ title: `PRIMAIRE — ${primary.length} exercices`,    data: primary });
+    if (secondary.length) sections.push({ title: `SECONDAIRE — ${secondary.length} exercices`, data: secondary });
+    return sections;
+  }, [subMuscleView]);
 
   const savedRef       = useRef(null);
   const userNameRef    = useRef('');
@@ -393,6 +440,36 @@ export default function PlanScreen() {
     setFavorites(next);
   }
 
+  // ── muscle explorer ────────────────────────────────────────────────────────
+
+  function openMuscleDetail(groupName, dayIdx) {
+    setSubMuscleView(null);
+    setMuscleModal({ groupName, dayIdx });
+  }
+
+  function closeMuscleModal() {
+    setMuscleModal(null);
+    setSubMuscleView(null);
+  }
+
+  function openSubMuscleDetail(muscleName, dayIdx) {
+    const groupName = Object.entries(HIGH_LEVEL_GROUPS)
+      .find(([, g]) => g.subMuscles.includes(muscleName))?.[0];
+    if (!groupName) return;
+    setMuscleModal({ groupName, dayIdx });
+    setSubMuscleView(muscleName);
+  }
+
+  function addFromMuscleModal(exercise) {
+    if (!muscleModal) return;
+    const next = deepCopy(plan);
+    const day  = next.days[muscleModal.dayIdx];
+    if (!day.exercises.includes(exercise)) {
+      day.exercises.push(exercise);
+      setPlan(next);
+    }
+  }
+
   // ── day label editing ──────────────────────────────────────────────────────
 
   function startEditLabel(dayIdx) {
@@ -585,7 +662,10 @@ export default function PlanScreen() {
 
                   {/* ── Chips cibles musculaires ── */}
                   <View style={styles.targetSection}>
-                    <Text style={styles.targetLabel}>CIBLER</Text>
+                    <View style={styles.targetLabelRow}>
+                      <Text style={styles.targetLabel}>CIBLER</Text>
+                      <Text style={styles.targetHint}>Maintenir = explorer les exercices</Text>
+                    </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
                         const on = targets.includes(groupName);
@@ -597,6 +677,8 @@ export default function PlanScreen() {
                               on && { backgroundColor: g.color + '22', borderColor: g.color },
                             ]}
                             onPress={() => toggleTarget(dayIdx, groupName)}
+                            onLongPress={() => openMuscleDetail(groupName, dayIdx)}
+                            delayLongPress={350}
                             activeOpacity={0.75}
                           >
                             <Text style={styles.targetChipIcon}>{g.icon}</Text>
@@ -635,7 +717,11 @@ export default function PlanScreen() {
 
                   {/* ── Panneau analyse musculaire ── */}
                   {analysis && (targets.length > 0 || dayData.exercises.length > 0) && (
-                    <MuscleAnalysisPanel analysis={analysis} />
+                    <MuscleAnalysisPanel
+                      analysis={analysis}
+                      onGroupPress={(name)   => openMuscleDetail(name, dayIdx)}
+                      onSubMusclePress={(m)  => openSubMuscleDetail(m, dayIdx)}
+                    />
                   )}
                 </View>
               )}
@@ -713,6 +799,114 @@ export default function PlanScreen() {
       </Modal>
 
       <WorkoutGeneratorModal visible={showGenerator} onClose={() => setShowGenerator(false)} />
+
+      {/* ── Muscle Explorer Modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={!!muscleModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeMuscleModal}
+      >
+        <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={closeMuscleModal} />
+        <View style={styles.muscleSheet}>
+          <View style={styles.modalHandle} />
+
+          {/* Header */}
+          <View style={styles.muscleSheetHdr}>
+            {subMuscleView ? (
+              <TouchableOpacity onPress={() => setSubMuscleView(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="arrow-back" size={22} color={colors.text} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 22 }} />
+            )}
+            <Text style={styles.muscleSheetTitle} numberOfLines={1}>
+              {subMuscleView
+                ? subMuscleView
+                : muscleModal
+                  ? `${HIGH_LEVEL_GROUPS[muscleModal.groupName]?.icon}  ${muscleModal.groupName}`
+                  : ''}
+            </Text>
+            <TouchableOpacity onPress={closeMuscleModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          {!subMuscleView ? (
+            /* ── Vue 1 : sous-muscles du groupe ── */
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.muscleSheetHint}>
+                Appuyer sur un sous-muscle pour voir tous ses exercices
+              </Text>
+              {muscleModal && (muscleModalGroupData?.subDetails ?? []).map(s => {
+                const sc = STATUS_STYLE[s.status] ?? STATUS_STYLE.bonus;
+                const label = { over: 'Surcharge', good: 'Équilibré', under: 'Insuffisant', none: 'Non travaillé', bonus: 'Actif' }[s.status] ?? '';
+                const fmtLoad = n => n % 1 === 0 ? String(n) : n.toFixed(1);
+                return (
+                  <TouchableOpacity
+                    key={s.name}
+                    style={styles.subMuscleRow}
+                    onPress={() => setSubMuscleView(s.name)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.subMuscleBar, { backgroundColor: sc.border }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subMuscleName}>{s.name}</Text>
+                      <Text style={[styles.subMuscleStatusTxt, { color: sc.text }]}>
+                        {label}{s.load > 0 ? `  ×${fmtLoad(s.load)}` : ''}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            /* ── Vue 2 : exercices pour le sous-muscle ── */
+            <>
+              <Text style={styles.muscleSheetHint}>
+                Appuyer sur + pour ajouter à la séance du jour
+              </Text>
+              <SectionList
+                sections={exercisesForSubMuscle}
+                keyExtractor={item => item}
+                style={{ flex: 1 }}
+                showsVerticalScrollIndicator={false}
+                stickySectionHeadersEnabled={false}
+                keyboardShouldPersistTaps="handled"
+                renderSectionHeader={({ section }) => (
+                  <Text style={styles.muscleExSectionHdr}>{section.title}</Text>
+                )}
+                renderItem={({ item }) => {
+                  const inDay = muscleModal
+                    ? (plan?.days[muscleModal.dayIdx]?.exercises ?? []).includes(item)
+                    : false;
+                  return (
+                    <View style={styles.muscleExRow}>
+                      <Text style={[styles.muscleExName, inDay && styles.muscleExNameAdded]}>
+                        {item}
+                      </Text>
+                      {inDay ? (
+                        <Ionicons name="checkmark-circle" size={22} color="#22C55E" />
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => addFromMuscleModal(item)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="add-circle" size={22} color={colors.primary} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={
+                  <Text style={styles.noResults}>Aucun exercice trouvé</Text>
+                }
+              />
+            </>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -772,11 +966,27 @@ const styles = StyleSheet.create({
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
   // Target muscle chips
-  targetSection: { marginBottom: 14 },
-  targetLabel:   { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 8 },
-  targetChip:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated, marginRight: 7 },
-  targetChipIcon:{ fontSize: 13 },
-  targetChipTxt: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  targetSection:  { marginBottom: 14 },
+  targetLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  targetLabel:    { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2 },
+  targetHint:     { fontSize: 9, color: '#383838', fontStyle: 'italic' },
+  targetChip:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated, marginRight: 7 },
+  targetChipIcon: { fontSize: 13 },
+  targetChipTxt:  { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+
+  // Muscle Explorer Modal
+  muscleSheet:        { backgroundColor: '#181818', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 44, borderTopWidth: 1, borderColor: '#2A2A2A', maxHeight: '82%', flex: 0, paddingTop: 12 },
+  muscleSheetHdr:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  muscleSheetTitle:   { flex: 1, fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center', letterSpacing: -0.3 },
+  muscleSheetHint:    { fontSize: 11, color: '#444', fontStyle: 'italic', marginBottom: 12, marginTop: 2 },
+  subMuscleRow:       { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#222' },
+  subMuscleBar:       { width: 4, height: 44, borderRadius: 2 },
+  subMuscleName:      { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 3 },
+  subMuscleStatusTxt: { fontSize: 12, fontWeight: '500' },
+  muscleExSectionHdr: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, paddingTop: 16, paddingBottom: 8 },
+  muscleExRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#1E1E1E', gap: 10 },
+  muscleExName:       { flex: 1, fontSize: 15, color: colors.text, fontWeight: '500' },
+  muscleExNameAdded:  { color: '#22C55E' },
 
   // Modal
   modalBg:    { flex: 1 },
