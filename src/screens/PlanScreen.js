@@ -47,17 +47,16 @@ const TEMPLATES = { ppl: PPL_PLAN, arnold: ARNOLD_PLAN, custom: CUSTOM_PLAN };
 
 function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
 
-const STATUS_STYLE = {
-  over:    { bg: 'rgba(239,68,68,0.12)',    border: 'rgba(239,68,68,0.3)',    text: '#EF4444' },
-  good:    { bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.3)',    text: '#22C55E' },
-  under:   { bg: 'rgba(245,158,11,0.12)',   border: 'rgba(245,158,11,0.3)',   text: '#F59E0B' },
-  bonus:   { bg: 'rgba(148,163,184,0.08)',  border: 'rgba(148,163,184,0.15)', text: '#64748B' },
-};
+// Status biomécanique d'un muscle selon sa charge pondérée
+function muscleStatus(load) {
+  if (load === 0)   return { label: 'Absent',        color: '#3A3A3A', dot: '#333' };
+  if (load < 1.0)   return { label: 'Sous-entraîné', color: colors.warning, dot: colors.warning };
+  if (load < 2.0)   return { label: 'Optimal',       color: colors.success, dot: colors.success };
+  return              { label: 'Surentraîné',          color: colors.danger,  dot: colors.danger  };
+}
 
-const GROUP_STATUS_ICON = { good: '✓', over: '!', partial: '~' };
-const GROUP_STATUS_COLOR = { good: '#22C55E', over: '#EF4444', partial: '#F59E0B' };
-
-function MuscleAnalysisPanel({ analysis, onGroupPress, onSubMusclePress }) {
+// ── MuscleAnalysisPanel supprimé — remplacé par MuscleDetailModal interactif
+function _unused_MuscleAnalysisPanel({ analysis, onGroupPress, onSubMusclePress }) {
   const targeted = Object.entries(analysis).filter(([, g]) => g.isTargeted);
   const bonus    = Object.entries(analysis).filter(([, g]) => !g.isTargeted && g.hasAnyHit);
 
@@ -173,28 +172,42 @@ export default function PlanScreen() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [muscleModal,   setMuscleModal]   = useState(null); // { groupName, dayIdx }
   const [subMuscleView, setSubMuscleView] = useState(null); // sous-muscle sélectionné
+  const [expandedGroup, setExpandedGroup] = useState(null); // "dayIdx::groupName"
 
-  // Analyse du groupe sélectionné dans le modal (recalculée à chaque changement de plan)
-  const muscleModalGroupData = useMemo(() => {
-    if (!muscleModal || !plan) return null;
-    const dayExs = plan.days[muscleModal.dayIdx]?.exercises ?? [];
-    const analysis = analyzeDayMuscles(dayExs, [muscleModal.groupName]);
-    return analysis[muscleModal.groupName] ?? null;
-  }, [muscleModal, plan]);
+  // Charge actuelle du sous-muscle dans la séance
+  const subMuscleLoad = useMemo(() => {
+    if (!subMuscleView || !muscleModal) return 0;
+    const dayExs = plan?.days[muscleModal.dayIdx]?.exercises ?? [];
+    return muscleCounts(dayExs).get(subMuscleView) ?? 0;
+  }, [subMuscleView, muscleModal, plan]);
 
-  // Exercices primaires et secondaires pour le sous-muscle sélectionné
-  const exercisesForSubMuscle = useMemo(() => {
-    if (!subMuscleView) return [];
-    const primary = [], secondary = [];
-    Object.entries(MUSCLE_GROUPS).forEach(([ex, d]) => {
-      if ((d.primary ?? []).includes(subMuscleView))        primary.push(ex);
-      else if ((d.secondary ?? []).includes(subMuscleView)) secondary.push(ex);
-    });
-    const sections = [];
-    if (primary.length)   sections.push({ title: `PRIMAIRE — ${primary.length} exercices`,    data: primary });
-    if (secondary.length) sections.push({ title: `SECONDAIRE — ${secondary.length} exercices`, data: secondary });
-    return sections;
-  }, [subMuscleView]);
+  // Exercices du plan qui travaillent ce sous-muscle (avec niveau de contribution)
+  const dayExerciseContributions = useMemo(() => {
+    if (!subMuscleView || !muscleModal) return [];
+    const dayExs = plan?.days[muscleModal.dayIdx]?.exercises ?? [];
+    return dayExs.map(ex => {
+      const d = MUSCLE_GROUPS[ex];
+      if (!d) return null;
+      if ((d.primary ?? []).includes(subMuscleView))        return { name: ex, level: 'PRIMARY',   c: 1.00 };
+      if ((d.secondary ?? []).includes(subMuscleView))      return { name: ex, level: 'SEC',        c: 0.50 };
+      if ((d.stabilisateur ?? []).includes(subMuscleView))  return { name: ex, level: 'STAB',       c: 0.25 };
+      return null;
+    }).filter(Boolean);
+  }, [subMuscleView, muscleModal, plan]);
+
+  // Exercices recommandés (muscle en primary, pas encore dans le plan)
+  const recommendedExercises = useMemo(() => {
+    if (!subMuscleView || !muscleModal) return [];
+    const dayExs = new Set(plan?.days[muscleModal.dayIdx]?.exercises ?? []);
+    return Object.entries(MUSCLE_GROUPS)
+      .filter(([ex, d]) => (d.primary ?? []).includes(subMuscleView) && !dayExs.has(ex))
+      .map(([ex]) => ex)
+      .slice(0, 8);
+  }, [subMuscleView, muscleModal, plan]);
+
+  // kept for backward compat
+  const muscleModalGroupData = null;
+  const exercisesForSubMuscle = [];
 
   const savedRef       = useRef(null);
   const userNameRef    = useRef('');
@@ -440,7 +453,22 @@ export default function PlanScreen() {
     setFavorites(next);
   }
 
-  // ── muscle explorer ────────────────────────────────────────────────────────
+  // ── accordion + muscle explorer ───────────────────────────────────────────
+
+  function handleExpandDay(dayIdx) {
+    if (editingDay === dayIdx) return;
+    const newExpanded = expandedDay === dayIdx ? null : dayIdx;
+    setExpandedDay(newExpanded);
+    setExpandedGroup(null);
+    if (newExpanded === null) return;
+    // Auto-sélectionner tous les groupes si la journée n'en a aucun de ciblé
+    const day = plan?.days[newExpanded];
+    if (day && (!day.targetMuscles || day.targetMuscles.length === 0)) {
+      const next = deepCopy(plan);
+      next.days[newExpanded].targetMuscles = Object.keys(HIGH_LEVEL_GROUPS);
+      setPlan(next);
+    }
+  }
 
   function openMuscleDetail(groupName, dayIdx) {
     setSubMuscleView(null);
@@ -611,7 +639,7 @@ export default function PlanScreen() {
             <View key={dayIdx} style={[styles.dayCard, isToday && styles.dayCardToday]}>
               <TouchableOpacity
                 style={styles.dayHeader}
-                onPress={() => { if (!isEditingThis) setExpandedDay(expanded ? null : dayIdx); }}
+                onPress={() => { if (!isEditingThis) handleExpandDay(dayIdx); }}
                 activeOpacity={0.75}
               >
                 <View style={styles.dayHeaderLeft}>
@@ -660,42 +688,56 @@ export default function PlanScreen() {
               {expanded && !isEditingThis && (
                 <View style={styles.exList}>
 
-                  {/* ── Groupes musculaires + sous-muscles ── */}
-                  <View style={styles.targetSection}>
-                    <Text style={styles.targetLabel}>GROUPES MUSCULAIRES</Text>
+                  {/* ── Accordion muscles ── */}
+                  <View style={styles.accordion}>
+                    <Text style={styles.accordionTitle}>MUSCLES CIBLÉS</Text>
                     {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
-                      const on = targets.includes(groupName);
+                      const on     = targets.includes(groupName);
+                      const expKey = `${dayIdx}::${groupName}`;
+                      const isOpen = expandedGroup === expKey;
                       return (
-                        <View key={groupName} style={styles.muscleGroupBlock}>
-                          {/* En-tête du groupe — toggle cible */}
-                          <TouchableOpacity
-                            style={[styles.muscleGroupHdr, on && { borderColor: g.color + '66' }]}
-                            onPress={() => toggleTarget(dayIdx, groupName)}
-                            activeOpacity={0.75}
-                          >
-                            <View style={[styles.muscleGroupDot, { backgroundColor: on ? g.color : '#333' }]} />
-                            <Text style={styles.muscleGroupIcon}>{g.icon}</Text>
-                            <Text style={[styles.muscleGroupName, on && { color: g.color }]}>{groupName}</Text>
-                            <Ionicons
-                              name={on ? 'checkmark-circle' : 'ellipse-outline'}
-                              size={15}
-                              color={on ? g.color : '#444'}
-                              style={{ marginLeft: 'auto' }}
-                            />
-                          </TouchableOpacity>
-                          {/* Pastilles sous-muscles — clic direct → exercices */}
-                          <View style={styles.muscleSubRow}>
-                            {g.subMuscles.map(sm => (
-                              <TouchableOpacity
-                                key={sm}
-                                style={[styles.muscleSubChip, { borderColor: g.color + '44' }]}
-                                onPress={() => openSubMuscleDetail(sm, dayIdx)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[styles.muscleSubChipTxt, { color: g.color }]}>{sm}</Text>
-                              </TouchableOpacity>
-                            ))}
+                        <View key={groupName} style={styles.accordionBlock}>
+                          <View style={styles.accordionRow}>
+                            {/* Expand chevron + group name */}
+                            <TouchableOpacity
+                              style={styles.accordionLeft}
+                              onPress={() => setExpandedGroup(isOpen ? null : expKey)}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons
+                                name={isOpen ? 'chevron-down' : 'chevron-forward'}
+                                size={12}
+                                color={on ? colors.primary : '#3A3A3A'}
+                              />
+                              <Text style={[styles.accordionName, on && styles.accordionNameOn]}>
+                                {groupName}
+                              </Text>
+                            </TouchableOpacity>
+                            {/* Checkbox toggle */}
+                            <TouchableOpacity
+                              onPress={() => toggleTarget(dayIdx, groupName)}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}
+                            >
+                              <View style={[styles.checkBox, on && styles.checkBoxOn]}>
+                                {on && <Ionicons name="checkmark" size={10} color="#000" />}
+                              </View>
+                            </TouchableOpacity>
                           </View>
+                          {/* Sub-muscle chips */}
+                          {isOpen && (
+                            <View style={styles.subTagRow}>
+                              {g.subMuscles.map(sm => (
+                                <TouchableOpacity
+                                  key={sm}
+                                  style={[styles.subTag, on && styles.subTagOn]}
+                                  onPress={() => openSubMuscleDetail(sm, dayIdx)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[styles.subTagTxt, on && styles.subTagTxtOn]}>{sm}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          )}
                         </View>
                       );
                     })}
@@ -727,14 +769,7 @@ export default function PlanScreen() {
                     <Text style={styles.addExTxt}>Ajouter un exercice</Text>
                   </TouchableOpacity>
 
-                  {/* ── Panneau analyse musculaire ── */}
-                  {analysis && (targets.length > 0 || dayData.exercises.length > 0) && (
-                    <MuscleAnalysisPanel
-                      analysis={analysis}
-                      onGroupPress={(name)   => openMuscleDetail(name, dayIdx)}
-                      onSubMusclePress={(m)  => openSubMuscleDetail(m, dayIdx)}
-                    />
-                  )}
+                  {/* Analyse désormais accessible via les pastilles sous-muscles */}
                 </View>
               )}
             </View>
@@ -812,111 +847,95 @@ export default function PlanScreen() {
 
       <WorkoutGeneratorModal visible={showGenerator} onClose={() => setShowGenerator(false)} />
 
-      {/* ── Muscle Explorer Modal ─────────────────────────────────────────── */}
+      {/* ── Muscle Detail Modal ───────────────────────────────────────────── */}
       <Modal
-        visible={!!muscleModal}
+        visible={!!muscleModal && !!subMuscleView}
         transparent
         animationType="slide"
         onRequestClose={closeMuscleModal}
       >
         <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={closeMuscleModal} />
-        <View style={styles.muscleSheet}>
-          <View style={styles.modalHandle} />
+        <View style={styles.detailSheet}>
+          <View style={styles.detailHandle} />
 
           {/* Header */}
-          <View style={styles.muscleSheetHdr}>
-            {subMuscleView ? (
-              <TouchableOpacity onPress={() => setSubMuscleView(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="arrow-back" size={22} color={colors.text} />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: 22 }} />
-            )}
-            <Text style={styles.muscleSheetTitle} numberOfLines={1}>
-              {subMuscleView
-                ? subMuscleView
-                : muscleModal
-                  ? `${HIGH_LEVEL_GROUPS[muscleModal.groupName]?.icon}  ${muscleModal.groupName}`
-                  : ''}
-            </Text>
-            <TouchableOpacity onPress={closeMuscleModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="close" size={22} color={colors.textMuted} />
+          <View style={styles.detailHdr}>
+            <Text style={styles.detailTitle} numberOfLines={1}>{subMuscleView ?? ''}</Text>
+            <TouchableOpacity onPress={closeMuscleModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          {!subMuscleView ? (
-            /* ── Vue 1 : sous-muscles du groupe ── */
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              <Text style={styles.muscleSheetHint}>
-                Appuyer sur un sous-muscle pour voir tous ses exercices
-              </Text>
-              {muscleModal && (muscleModalGroupData?.subDetails ?? []).map(s => {
-                const sc = STATUS_STYLE[s.status] ?? STATUS_STYLE.bonus;
-                const label = { over: 'Surcharge', good: 'Équilibré', under: 'Insuffisant', none: 'Non travaillé', bonus: 'Actif' }[s.status] ?? '';
-                const fmtLoad = n => n % 1 === 0 ? String(n) : n.toFixed(1);
-                return (
-                  <TouchableOpacity
-                    key={s.name}
-                    style={styles.subMuscleRow}
-                    onPress={() => setSubMuscleView(s.name)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={[styles.subMuscleBar, { backgroundColor: sc.border }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.subMuscleName}>{s.name}</Text>
-                      <Text style={[styles.subMuscleStatusTxt, { color: sc.text }]}>
-                        {label}{s.load > 0 ? `  ×${fmtLoad(s.load)}` : ''}
-                      </Text>
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+            {/* ── Volume + statut ── */}
+            {(() => {
+              const st   = muscleStatus(subMuscleLoad);
+              const pct  = Math.min(subMuscleLoad / 2.0, 1);
+              const fmt  = n => n % 1 === 0 ? String(n) : n.toFixed(1);
+              return (
+                <View style={styles.volumeCard}>
+                  <View style={styles.volumeRow}>
+                    <Text style={styles.volumeValue}>{fmt(subMuscleLoad)}</Text>
+                    <View style={[styles.statusBadge, { borderColor: st.dot }]}>
+                      <View style={[styles.statusDot, { backgroundColor: st.dot }]} />
+                      <Text style={[styles.statusLabel, { color: st.color }]}>{st.label}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            /* ── Vue 2 : exercices pour le sous-muscle ── */
-            <>
-              <Text style={styles.muscleSheetHint}>
-                Appuyer sur + pour ajouter à la séance du jour
-              </Text>
-              <SectionList
-                sections={exercisesForSubMuscle}
-                keyExtractor={item => item}
-                style={{ flex: 1 }}
-                showsVerticalScrollIndicator={false}
-                stickySectionHeadersEnabled={false}
-                keyboardShouldPersistTaps="handled"
-                renderSectionHeader={({ section }) => (
-                  <Text style={styles.muscleExSectionHdr}>{section.title}</Text>
-                )}
-                renderItem={({ item }) => {
-                  const inDay = muscleModal
-                    ? (plan?.days[muscleModal.dayIdx]?.exercises ?? []).includes(item)
-                    : false;
-                  return (
-                    <View style={styles.muscleExRow}>
-                      <Text style={[styles.muscleExName, inDay && styles.muscleExNameAdded]}>
-                        {item}
+                  </View>
+                  <View style={styles.gaugeTrack}>
+                    <View style={[styles.gaugeFill, { width: `${pct * 100}%`, backgroundColor: st.dot }]} />
+                  </View>
+                  <View style={styles.gaugeLabels}>
+                    <Text style={styles.gaugeHint}>Absent</Text>
+                    <Text style={styles.gaugeHint}>Optimal  1.0 – 2.0</Text>
+                    <Text style={styles.gaugeHint}>Surcharge</Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* ── Exercices dans la séance ── */}
+            {dayExerciseContributions.length > 0 && (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>DANS CETTE SÉANCE</Text>
+                {dayExerciseContributions.map(item => (
+                  <View key={item.name} style={styles.detailExRow}>
+                    <Text style={styles.detailExName}>{item.name}</Text>
+                    <View style={styles.detailContrib}>
+                      <Text style={[
+                        styles.detailLevel,
+                        item.level === 'PRIMARY' && { color: colors.primary },
+                      ]}>
+                        {item.level}
                       </Text>
-                      {inDay ? (
-                        <Ionicons name="checkmark-circle" size={22} color="#22C55E" />
-                      ) : (
-                        <TouchableOpacity
-                          onPress={() => addFromMuscleModal(item)}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Ionicons name="add-circle" size={22} color={colors.primary} />
-                        </TouchableOpacity>
-                      )}
+                      <Text style={styles.detailC}>+{item.c}</Text>
                     </View>
-                  );
-                }}
-                ListEmptyComponent={
-                  <Text style={styles.noResults}>Aucun exercice trouvé</Text>
-                }
-              />
-            </>
-          )}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ── Exercices recommandés ── */}
+            {recommendedExercises.length > 0 && (
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>EXERCICES RECOMMANDÉS</Text>
+                {recommendedExercises.map(ex => (
+                  <View key={ex} style={styles.detailExRow}>
+                    <Text style={styles.detailExName}>{ex}</Text>
+                    <TouchableOpacity
+                      onPress={() => addFromMuscleModal(ex)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <View style={styles.addBtn}>
+                        <Ionicons name="add" size={14} color="#000" />
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={{ height: 16 }} />
+          </ScrollView>
         </View>
       </Modal>
     </SafeAreaView>
@@ -977,31 +996,45 @@ const styles = StyleSheet.create({
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 4 },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
-  // Groupes musculaires
-  targetSection:     { marginBottom: 14 },
-  targetLabel:       { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 10 },
-  muscleGroupBlock:  { marginBottom: 10 },
-  muscleGroupHdr:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, paddingHorizontal: 12, backgroundColor: colors.surfaceElevated, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 6 },
-  muscleGroupDot:    { width: 6, height: 6, borderRadius: 3 },
-  muscleGroupIcon:   { fontSize: 14 },
-  muscleGroupName:   { fontSize: 13, fontWeight: '700', color: colors.textMuted, flex: 1 },
-  muscleSubRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 4 },
-  muscleSubChip:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, backgroundColor: 'transparent' },
-  muscleSubChipTxt:  { fontSize: 11, fontWeight: '600' },
+  // Accordion muscles
+  accordion:        { marginTop: 16, borderTopWidth: 1, borderTopColor: '#1C1C1C', paddingTop: 16 },
+  accordionTitle:   { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 12 },
+  accordionBlock:   { marginBottom: 2 },
+  accordionRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#151515' },
+  accordionLeft:    { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  accordionName:    { fontSize: 14, fontWeight: '600', color: '#3A3A3A' },
+  accordionNameOn:  { color: colors.text },
+  checkBox:         { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' },
+  checkBoxOn:       { backgroundColor: colors.primary, borderColor: colors.primary },
+  subTagRow:        { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 10, paddingLeft: 22 },
+  subTag:           { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#1E1E1E' },
+  subTagOn:         { borderColor: colors.primary + '55', backgroundColor: colors.primaryGlow },
+  subTagTxt:        { fontSize: 11, fontWeight: '500', color: '#444' },
+  subTagTxtOn:      { color: colors.primary },
 
-  // Muscle Explorer Modal
-  muscleSheet:        { backgroundColor: '#181818', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 44, borderTopWidth: 1, borderColor: '#2A2A2A', maxHeight: '82%', flex: 0, paddingTop: 12 },
-  muscleSheetHdr:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  muscleSheetTitle:   { flex: 1, fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center', letterSpacing: -0.3 },
-  muscleSheetHint:    { fontSize: 11, color: '#444', fontStyle: 'italic', marginBottom: 12, marginTop: 2 },
-  subMuscleRow:       { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#222' },
-  subMuscleBar:       { width: 4, height: 44, borderRadius: 2 },
-  subMuscleName:      { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 3 },
-  subMuscleStatusTxt: { fontSize: 12, fontWeight: '500' },
-  muscleExSectionHdr: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, paddingTop: 16, paddingBottom: 8 },
-  muscleExRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#1E1E1E', gap: 10 },
-  muscleExName:       { flex: 1, fontSize: 15, color: colors.text, fontWeight: '500' },
-  muscleExNameAdded:  { color: '#22C55E' },
+  // Muscle Detail Modal
+  detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, paddingBottom: 44, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '85%', flex: 0, paddingTop: 12 },
+  detailHandle:     { width: 32, height: 3, backgroundColor: '#2A2A2A', borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
+  detailHdr:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
+  detailTitle:      { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.5, flex: 1 },
+  volumeCard:       { marginBottom: 26 },
+  volumeRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  volumeValue:      { fontSize: 42, fontWeight: '900', color: colors.text, letterSpacing: -2 },
+  statusBadge:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  statusDot:        { width: 6, height: 6, borderRadius: 3 },
+  statusLabel:      { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  gaugeTrack:       { height: 3, backgroundColor: '#1A1A1A', borderRadius: 2, overflow: 'hidden', marginBottom: 6 },
+  gaugeFill:        { height: 3, borderRadius: 2 },
+  gaugeLabels:      { flexDirection: 'row', justifyContent: 'space-between' },
+  gaugeHint:        { fontSize: 10, color: '#2A2A2A', fontWeight: '500' },
+  detailSection:    { marginBottom: 22 },
+  detailSectionTitle:{ fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 10 },
+  detailExRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#111' },
+  detailExName:     { flex: 1, fontSize: 14, fontWeight: '500', color: colors.text },
+  detailContrib:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailLevel:      { fontSize: 11, fontWeight: '700', color: '#3A3A3A', letterSpacing: 0.5 },
+  detailC:          { fontSize: 12, fontWeight: '700', color: '#3A3A3A', width: 30, textAlign: 'right' },
+  addBtn:           { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
 
   // Modal
   modalBg:    { flex: 1 },
