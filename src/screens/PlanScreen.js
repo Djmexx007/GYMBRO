@@ -29,7 +29,7 @@ import {
   getFavorites, toggleFavorite,
 } from '../storage/storage';
 import { PPL_PLAN, ARNOLD_PLAN, CUSTOM_PLAN } from '../data/defaultPlans';
-import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, analyzeDayMuscles } from '../data/muscleGroups';
+import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, analyzeDayMuscles, muscleCounts } from '../data/muscleGroups';
 import WorkoutGeneratorModal from './WorkoutGeneratorModal';
 import { exportPlanToExcel } from '../lib/exportPlan';
 
