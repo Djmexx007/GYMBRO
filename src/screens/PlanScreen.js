@@ -660,33 +660,45 @@ export default function PlanScreen() {
               {expanded && !isEditingThis && (
                 <View style={styles.exList}>
 
-                  {/* ── Chips cibles musculaires ── */}
+                  {/* ── Groupes musculaires + sous-muscles ── */}
                   <View style={styles.targetSection}>
-                    <View style={styles.targetLabelRow}>
-                      <Text style={styles.targetLabel}>CIBLER</Text>
-                      <Text style={styles.targetHint}>Maintenir = explorer les exercices</Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
-                        const on = targets.includes(groupName);
-                        return (
+                    <Text style={styles.targetLabel}>GROUPES MUSCULAIRES</Text>
+                    {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
+                      const on = targets.includes(groupName);
+                      return (
+                        <View key={groupName} style={styles.muscleGroupBlock}>
+                          {/* En-tête du groupe — toggle cible */}
                           <TouchableOpacity
-                            key={groupName}
-                            style={[
-                              styles.targetChip,
-                              on && { backgroundColor: g.color + '22', borderColor: g.color },
-                            ]}
+                            style={[styles.muscleGroupHdr, on && { borderColor: g.color + '66' }]}
                             onPress={() => toggleTarget(dayIdx, groupName)}
-                            onLongPress={() => openMuscleDetail(groupName, dayIdx)}
-                            delayLongPress={350}
                             activeOpacity={0.75}
                           >
-                            <Text style={styles.targetChipIcon}>{g.icon}</Text>
-                            <Text style={[styles.targetChipTxt, on && { color: g.color }]}>{groupName}</Text>
+                            <View style={[styles.muscleGroupDot, { backgroundColor: on ? g.color : '#333' }]} />
+                            <Text style={styles.muscleGroupIcon}>{g.icon}</Text>
+                            <Text style={[styles.muscleGroupName, on && { color: g.color }]}>{groupName}</Text>
+                            <Ionicons
+                              name={on ? 'checkmark-circle' : 'ellipse-outline'}
+                              size={15}
+                              color={on ? g.color : '#444'}
+                              style={{ marginLeft: 'auto' }}
+                            />
                           </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
+                          {/* Pastilles sous-muscles — clic direct → exercices */}
+                          <View style={styles.muscleSubRow}>
+                            {g.subMuscles.map(sm => (
+                              <TouchableOpacity
+                                key={sm}
+                                style={[styles.muscleSubChip, { borderColor: g.color + '44' }]}
+                                onPress={() => openSubMuscleDetail(sm, dayIdx)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[styles.muscleSubChipTxt, { color: g.color }]}>{sm}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })}
                   </View>
 
                   {/* ── Liste d'exercices ── */}
@@ -965,14 +977,17 @@ const styles = StyleSheet.create({
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 4 },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
-  // Target muscle chips
-  targetSection:  { marginBottom: 14 },
-  targetLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  targetLabel:    { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2 },
-  targetHint:     { fontSize: 9, color: '#383838', fontStyle: 'italic' },
-  targetChip:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated, marginRight: 7 },
-  targetChipIcon: { fontSize: 13 },
-  targetChipTxt:  { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  // Groupes musculaires
+  targetSection:     { marginBottom: 14 },
+  targetLabel:       { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 10 },
+  muscleGroupBlock:  { marginBottom: 10 },
+  muscleGroupHdr:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, paddingHorizontal: 12, backgroundColor: colors.surfaceElevated, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 6 },
+  muscleGroupDot:    { width: 6, height: 6, borderRadius: 3 },
+  muscleGroupIcon:   { fontSize: 14 },
+  muscleGroupName:   { fontSize: 13, fontWeight: '700', color: colors.textMuted, flex: 1 },
+  muscleSubRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingLeft: 4 },
+  muscleSubChip:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, backgroundColor: 'transparent' },
+  muscleSubChipTxt:  { fontSize: 11, fontWeight: '600' },
 
   // Muscle Explorer Modal
   muscleSheet:        { backgroundColor: '#181818', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 44, borderTopWidth: 1, borderColor: '#2A2A2A', maxHeight: '82%', flex: 0, paddingTop: 12 },
