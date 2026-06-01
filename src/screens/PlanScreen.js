@@ -820,7 +820,7 @@ export default function PlanScreen() {
                             activeOpacity={0.65}
                           >
                             <Text style={styles.analysisEmoji}>{emoji}</Text>
-                            <Text style={[styles.analysisName, !tappable && { color: '#3A3A3A' }]}>
+                            <Text style={[styles.analysisName, item.load === 0 && { color: '#3A3A3A' }]}>
                               {item.name}
                             </Text>
                             {item.load > 0
