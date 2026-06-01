@@ -498,6 +498,25 @@ export default function PlanScreen() {
     }
   }
 
+  function removeFromDay(exercise) {
+    if (!muscleModal) return;
+    const next = deepCopy(plan);
+    const day  = next.days[muscleModal.dayIdx];
+    const idx  = day.exercises.indexOf(exercise);
+    if (idx !== -1) day.exercises.splice(idx, 1);
+    setPlan(next);
+  }
+
+  function toggleExcludedMuscle(dayIdx, muscleName) {
+    const next = deepCopy(plan);
+    const day  = next.days[dayIdx];
+    if (!day.excludedMuscles) day.excludedMuscles = [];
+    const idx = day.excludedMuscles.indexOf(muscleName);
+    if (idx === -1) day.excludedMuscles.push(muscleName);
+    else            day.excludedMuscles.splice(idx, 1);
+    setPlan(next);
+  }
+
   // ── day label editing ──────────────────────────────────────────────────────
 
   function startEditLabel(dayIdx) {
@@ -632,8 +651,33 @@ export default function PlanScreen() {
           const count    = dayData.exercises.length;
           const isEditingThis = editingDay === dayIdx;
 
-          const targets  = dayData.targetMuscles ?? [];
-          const analysis = expanded ? analyzeDayMuscles(dayData.exercises, targets) : null;
+          const excludedMuscles = dayData.excludedMuscles ?? [];
+
+          // Analyse musculaire inline — calculée seulement si le jour est déployé avec des exercices
+          const muscleAnalysisItems = (() => {
+            if (!expanded || dayData.exercises.length === 0) return [];
+            const loads  = muscleCounts(dayData.exercises);
+            const seen   = new Set();
+            const result = [];
+            // 1. Tous les muscles effectivement chargés
+            loads.forEach((load, sm) => {
+              if (!excludedMuscles.includes(sm)) {
+                result.push({ name: sm, load, st: muscleStatus(load) });
+                seen.add(sm);
+              }
+            });
+            // 2. Sous-muscles manquants du groupe actuellement ouvert
+            if (expandedGroup?.startsWith(`${dayIdx}::`)) {
+              const gn = expandedGroup.slice(expandedGroup.indexOf('::') + 2);
+              (HIGH_LEVEL_GROUPS[gn]?.subMuscles ?? []).forEach(sm => {
+                if (!seen.has(sm) && !excludedMuscles.includes(sm)) {
+                  result.push({ name: sm, load: 0, st: muscleStatus(0) });
+                }
+              });
+            }
+            const ord = { 'Surentraîné': 0, 'Optimal': 1, 'Sous-entraîné': 2, 'Absent': 3 };
+            return result.sort((a, b) => (ord[a.st.label] ?? 4) - (ord[b.st.label] ?? 4));
+          })();
 
           return (
             <View key={dayIdx} style={[styles.dayCard, isToday && styles.dayCardToday]}>
@@ -688,69 +732,56 @@ export default function PlanScreen() {
               {expanded && !isEditingThis && (
                 <View style={styles.exList}>
 
-                  {/* ── Muscles ciblés — layout horizontal ── */}
-                  <View style={styles.hMuscle}>
-                    <Text style={styles.hMuscleTitle}>MUSCLES CIBLÉS</Text>
-
-                    {/* Rangée 1 : groupes */}
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ gap: 6, paddingBottom: 10 }}
-                    >
-                      {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName, g]) => {
-                        const on     = targets.includes(groupName);
+                  {/* ── Grille groupes musculaires ── */}
+                  <View style={styles.muscleSection}>
+                    <Text style={styles.muscleSectionTitle}>GROUPES MUSCULAIRES</Text>
+                    <View style={styles.muscleGrid}>
+                      {Object.entries(HIGH_LEVEL_GROUPS).map(([groupName]) => {
                         const expKey = `${dayIdx}::${groupName}`;
                         const isOpen = expandedGroup === expKey;
                         return (
                           <TouchableOpacity
                             key={groupName}
-                            style={[styles.hGroupChip, on && styles.hGroupChipOn, isOpen && styles.hGroupChipOpen]}
-                            onPress={() => {
-                              setExpandedGroup(isOpen ? null : expKey);
-                              if (!on) toggleTarget(dayIdx, groupName);
-                            }}
-                            onLongPress={() => toggleTarget(dayIdx, groupName)}
-                            delayLongPress={400}
+                            style={[styles.gridItem, isOpen && styles.gridItemOpen]}
+                            onPress={() => setExpandedGroup(isOpen ? null : expKey)}
                             activeOpacity={0.7}
                           >
-                            <Text style={[styles.hGroupName, on && styles.hGroupNameOn]}>
+                            <Text style={[styles.gridItemTxt, isOpen && styles.gridItemTxtOpen]}>
                               {groupName}
                             </Text>
-                            {on && <View style={styles.hGroupDot} />}
                           </TouchableOpacity>
                         );
                       })}
-                    </ScrollView>
+                    </View>
 
-                    {/* Rangée 2 : sous-muscles du groupe ouvert */}
+                    {/* Sous-muscles du groupe ouvert */}
                     {expandedGroup?.startsWith(`${dayIdx}::`) && (() => {
                       const gName = expandedGroup.slice(expandedGroup.indexOf('::') + 2);
                       const gData = HIGH_LEVEL_GROUPS[gName];
-                      const on    = targets.includes(gName);
                       if (!gData) return null;
                       return (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={{ gap: 6, paddingBottom: 4 }}
-                        >
-                          {gData.subMuscles.map(sm => (
-                            <TouchableOpacity
-                              key={sm}
-                              style={[styles.hSubChip, on && styles.hSubChipOn]}
-                              onPress={() => openSubMuscleDetail(sm, dayIdx)}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={[styles.hSubTxt, on && styles.hSubTxtOn]}>{sm}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
+                        <View style={styles.subPillsWrap}>
+                          {gData.subMuscles.map(sm => {
+                            const isExcluded = excludedMuscles.includes(sm);
+                            return (
+                              <TouchableOpacity
+                                key={sm}
+                                style={styles.subPill}
+                                onPress={() => toggleExcludedMuscle(dayIdx, sm)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[styles.subPillTxt, isExcluded && styles.subPillTxtOff]}>
+                                  {sm}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
                       );
                     })()}
                   </View>
 
-                  {/* ── Liste d'exercices ── */}
+                  {/* ── Exercices ── */}
                   {dayData.exercises.length === 0 ? (
                     <Text style={styles.emptyDay}>Aucun exercice — repos ou ajoutes-en</Text>
                   ) : (
@@ -776,7 +807,35 @@ export default function PlanScreen() {
                     <Text style={styles.addExTxt}>Ajouter un exercice</Text>
                   </TouchableOpacity>
 
-                  {/* Analyse désormais accessible via les pastilles sous-muscles */}
+                  {/* ── Analyse musculaire ── */}
+                  {muscleAnalysisItems.length > 0 && (
+                    <View style={styles.analysisBlock}>
+                      <Text style={styles.analysisTitle}>ANALYSE MUSCULAIRE</Text>
+                      {muscleAnalysisItems.map(item => {
+                        const emoji = { 'Surentraîné': '🔴', 'Optimal': '🟢', 'Sous-entraîné': '🟠', 'Absent': '⚫' }[item.st.label] ?? '⚫';
+                        const tappable = item.load > 0;
+                        return (
+                          <TouchableOpacity
+                            key={item.name}
+                            style={styles.analysisRow}
+                            onPress={() => tappable ? openSubMuscleDetail(item.name, dayIdx) : null}
+                            activeOpacity={tappable ? 0.65 : 1}
+                            disabled={!tappable}
+                          >
+                            <Text style={styles.analysisEmoji}>{emoji}</Text>
+                            <Text style={[styles.analysisName, !tappable && { color: '#3A3A3A' }]}>
+                              {item.name}
+                            </Text>
+                            {item.load > 0 && (
+                              <Text style={[styles.analysisLoad, { color: item.st.color }]}>
+                                ×{item.load % 1 === 0 ? item.load : item.load.toFixed(1)}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -903,31 +962,70 @@ export default function PlanScreen() {
             {/* ── Exercices dans la séance ── */}
             {dayExerciseContributions.length > 0 && (
               <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>DANS CETTE SÉANCE</Text>
+                <Text style={styles.detailSectionTitle}>EXERCICES ACTUELS</Text>
                 {dayExerciseContributions.map(item => (
                   <View key={item.name} style={styles.detailExRow}>
-                    <Text style={styles.detailExName}>{item.name}</Text>
-                    <View style={styles.detailContrib}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.detailExName}>{item.name}</Text>
                       <Text style={[
                         styles.detailLevel,
                         item.level === 'PRIMARY' && { color: colors.primary },
                       ]}>
-                        {item.level}
+                        {item.level}  +{item.c}
                       </Text>
-                      <Text style={styles.detailC}>+{item.c}</Text>
                     </View>
+                    {/* Bouton retirer si surentraîné */}
+                    {subMuscleLoad >= 2.0 && (
+                      <TouchableOpacity
+                        onPress={() => removeFromDay(item.name)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.removeBtn}>
+                          <Ionicons name="remove" size={14} color="#000" />
+                        </View>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ))}
               </View>
             )}
 
-            {/* ── Exercices recommandés ── */}
-            {recommendedExercises.length > 0 && (
+            {/* ── Recommandations contextuelles ── */}
+            {subMuscleLoad >= 2.0 ? (
+              /* Surentraîné → retirer / remplacer */
+              dayExerciseContributions.filter(i => i.level === 'PRIMARY').length > 0 && (
+                <View style={styles.detailSection}>
+                  <View style={styles.detailSectionHdr}>
+                    <Text style={styles.detailSectionTitle}>RETIRER / REMPLACER</Text>
+                    <Text style={styles.detailSectionSub}>Réduit la surcharge</Text>
+                  </View>
+                  {dayExerciseContributions
+                    .filter(i => i.level === 'PRIMARY')
+                    .map(item => (
+                      <View key={item.name} style={styles.detailExRow}>
+                        <Text style={[styles.detailExName, { flex: 1 }]}>{item.name}</Text>
+                        <TouchableOpacity
+                          onPress={() => removeFromDay(item.name)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <View style={styles.removeBtn}>
+                            <Ionicons name="remove" size={14} color="#000" />
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                </View>
+              )
+            ) : recommendedExercises.length > 0 && (
+              /* Sous-entraîné ou absent → ajouter */
               <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>EXERCICES RECOMMANDÉS</Text>
+                <View style={styles.detailSectionHdr}>
+                  <Text style={styles.detailSectionTitle}>AJOUTER POUR ÉQUILIBRER</Text>
+                  <Text style={styles.detailSectionSub}>{subMuscleLoad === 0 ? 'Muscle non travaillé' : 'Stimulation insuffisante'}</Text>
+                </View>
                 {recommendedExercises.map(ex => (
                   <View key={ex} style={styles.detailExRow}>
-                    <Text style={styles.detailExName}>{ex}</Text>
+                    <Text style={[styles.detailExName, { flex: 1 }]}>{ex}</Text>
                     <TouchableOpacity
                       onPress={() => addFromMuscleModal(ex)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1003,19 +1101,26 @@ const styles = StyleSheet.create({
   addExBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 4 },
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
-  // Muscles ciblés horizontal
-  hMuscle:          { marginTop: 16, borderTopWidth: 1, borderTopColor: '#1C1C1C', paddingTop: 14 },
-  hMuscleTitle:     { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 10 },
-  hGroupChip:       { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#1E1E1E', flexDirection: 'row', alignItems: 'center', gap: 5 },
-  hGroupChipOn:     { borderColor: colors.primary + '55', backgroundColor: colors.primaryGlow },
-  hGroupChipOpen:   { borderColor: colors.primary },
-  hGroupName:       { fontSize: 13, fontWeight: '600', color: '#3A3A3A' },
-  hGroupNameOn:     { color: colors.primary },
-  hGroupDot:        { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.primary },
-  hSubChip:         { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#1E1E1E' },
-  hSubChipOn:       { borderColor: colors.primary + '55', backgroundColor: colors.primaryGlow },
-  hSubTxt:          { fontSize: 12, fontWeight: '500', color: '#444' },
-  hSubTxtOn:        { color: colors.primary },
+  // Grille groupes musculaires
+  muscleSection:      { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1A1A1A' },
+  muscleSectionTitle: { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 12 },
+  muscleGrid:         { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  gridItem:           { width: '48.5%', paddingVertical: 11, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: '#1C1C1C', backgroundColor: '#0D0D0D', alignItems: 'center' },
+  gridItemOpen:       { borderColor: colors.primary, backgroundColor: colors.primaryGlow },
+  gridItemTxt:        { fontSize: 13, fontWeight: '600', color: '#3A3A3A' },
+  gridItemTxtOpen:    { color: colors.primary },
+  subPillsWrap:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 12 },
+  subPill:            { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#242424' },
+  subPillTxt:         { fontSize: 12, fontWeight: '500', color: colors.text },
+  subPillTxtOff:      { textDecorationLine: 'line-through', opacity: 0.3 },
+
+  // Analyse musculaire inline
+  analysisBlock:      { marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#1A1A1A' },
+  analysisTitle:      { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 10 },
+  analysisRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#111' },
+  analysisEmoji:      { fontSize: 13, marginRight: 10, width: 20 },
+  analysisName:       { flex: 1, fontSize: 14, fontWeight: '500', color: colors.text },
+  analysisLoad:       { fontSize: 12, fontWeight: '700' },
 
   // Muscle Detail Modal
   detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, paddingBottom: 44, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '85%', flex: 0, paddingTop: 12 },
@@ -1040,6 +1145,9 @@ const styles = StyleSheet.create({
   detailLevel:      { fontSize: 11, fontWeight: '700', color: '#3A3A3A', letterSpacing: 0.5 },
   detailC:          { fontSize: 12, fontWeight: '700', color: '#3A3A3A', width: 30, textAlign: 'right' },
   addBtn:           { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  removeBtn:        { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
+  detailSectionHdr: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  detailSectionSub: { fontSize: 10, color: '#3A3A3A', fontStyle: 'italic' },
 
   // Modal
   modalBg:    { flex: 1 },
