@@ -63,6 +63,7 @@ export const DEFAULT_LIBRARY = [
   'Dumbbell Wrist Curl', 'Reverse Dumbbell Wrist Curl',
   'Behind the Back Wrist Curl', 'Wrist Extension', 'Pronation Curls',
   'Bar Hangs', 'Plate Pinch', 'Towel Pull-ups',
+  'Hammer Grip Wrist Curl', 'Dumbbell Forearm Rotation',
   'Wrist Roller', 'Grippers', 'Pinch Grip Carries', 'Barbell Holds',
   'Trap Bar Farmer Walk', 'Single Arm Farmers Walk',
 

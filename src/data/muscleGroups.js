@@ -164,6 +164,8 @@ export const MUSCLE_GROUPS = {
   'Reverse Dumbbell Wrist Curl':{ primary: ['Avant-bras (extenseurs)'],       secondary: [] },
   'Behind the Back Wrist Curl':{ primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
   'Wrist Extension':           { primary: ['Avant-bras (extenseurs)'],        secondary: [] },
+  'Hammer Grip Wrist Curl':    { primary: ['Brachialis', 'Brachioradialis'], secondary: ['Avant-bras (fléchisseurs)'] },
+  'Dumbbell Forearm Rotation': { primary: ['Pronateur teres'],                secondary: ['Brachioradialis', 'Avant-bras (fléchisseurs)', 'Avant-bras (extenseurs)'] },
   'Pronation Curls':           { primary: ['Pronateur teres'],                secondary: ['Avant-bras (fléchisseurs)'] },
   "Farmer's Walk":             { primary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (profond)'] },
   'Plate Pinch':               { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
