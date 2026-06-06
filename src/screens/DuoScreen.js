@@ -7,10 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
-import { getAllUsersLogs, getUserName, saveSession, clearAllUsersLogs, insertRawCloud } from '../storage/storage';
+import { getAllUsersLogs, getUserName, getLogs, getCloudLogs, saveSession, clearAllUsersLogs } from '../storage/storage';
 import { supabase } from '../lib/supabase';
 import { WORKOUT_SPLIT } from '../data/workoutPlan';
-import { FRIEND_BESTS } from '../data/mockDuo';
+
+// ── Conversion lb → kg ────────────────────────────────────────────────────────
+
+const LB_TO_KG = 0.453592;
+function lbToKg(lb) { return lb * LB_TO_KG; }
+function fmtKg(kg)  { return kg >= 1000 ? `${(kg / 1000).toFixed(1)}k` : kg.toFixed(1); }
 
 // ── 1RM ───────────────────────────────────────────────────────────────────────
 
@@ -29,13 +34,21 @@ function computeBests(logs) {
   return map;
 }
 
+function computeMaxWeights(logs) {
+  const map = {};
+  logs.forEach(s => {
+    if (!map[s.exercise] || s.weight > map[s.exercise].weight) map[s.exercise] = s;
+  });
+  return map;
+}
+
 // ── Nouvelles fonctions de calcul ─────────────────────────────────────────────
 
 function computeWeekVolume(logs) {
   const cutoff = Date.now() - 7 * 86400000;
   return logs
     .filter(s => new Date(s.date).getTime() >= cutoff)
-    .reduce((sum, s) => sum + s.weight * s.reps, 0);
+    .reduce((sum, s) => sum + lbToKg(s.weight) * s.reps, 0);
 }
 
 function computeStreak(logs) {
@@ -63,7 +76,6 @@ function daysSinceLastSession(logs) {
 // ── Dev helpers ───────────────────────────────────────────────────────────────
 
 function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 async function seedFakeHistory() {
   const sets = [];
@@ -74,7 +86,7 @@ async function seedFakeHistory() {
       const daysBack = weekAgo * 7 + (6 - day);
       const date = new Date(now - daysBack * 86400000).toISOString();
       workout.exercises.forEach(exercise => {
-        const base = rand(65, 225);
+        const base = rand(65, 185);
         for (let s = 0; s < rand(3, 5); s++) {
           sets.push({ exercise, weight: base + rand(-10, 10), reps: rand(5, 12), date });
         }
@@ -82,132 +94,74 @@ async function seedFakeHistory() {
     }
   }
   await saveSession(sets);
-  return `✅ ${sets.length} sets générés sur 3 semaines. T'as l'air d'un vrai athlète maintenant.`;
+  return `✅ ${sets.length} sets générés sur 3 semaines (7j × 3 sem.).`;
 }
 
-async function becomeGoat() {
-  const prs = [
-    { exercise: 'Bench Press',       weight: 405,  reps: 1 },
-    { exercise: 'Squat',             weight: 900,  reps: 1 },
-    { exercise: 'Deadlift',          weight: 1000, reps: 1 },
-    { exercise: 'Barbell Row',       weight: 500,  reps: 5 },
-    { exercise: 'Pull-ups',          weight: 0,    reps: 50 },
-    { exercise: 'Biceps Curl',       weight: 200,  reps: 20 },
-    { exercise: 'Lateral Raises',    weight: 100,  reps: 30 },
-    { exercise: 'Shoulder Press',    weight: 350,  reps: 5 },
-    { exercise: 'Leg Press',         weight: 2000, reps: 20 },
-    { exercise: 'Triceps Pushdown',  weight: 300,  reps: 25 },
-  ].map(s => ({ ...s, date: new Date().toISOString() }));
-  await saveSession(prs);
-  return '🐐 Félicitations. Tu es officiellement plus fort que Dieu. Zach peut aller se rhabiller.';
-}
-
-async function zachIsAFraud() {
-  const sets = Object.entries(FRIEND_BESTS).map(([exercise, { weight, reps }]) => ({
-    exercise, weight: weight + 1, reps,
-    date: new Date().toISOString(),
-  }));
-  await saveSession(sets);
-  return `🕵️ Fraude exposée. Tu bats Zach sur ${sets.length} exercices. Enquête terminée.`;
-}
-
-async function testProgressChart() {
+async function seedProgressionData() {
   const now = Date.now();
   const exercises = [
-    { name: 'Bench Press',    base: 80,  reps: 5 },
-    { name: 'Squat',          base: 100, reps: 5 },
-    { name: 'Deadlift',       base: 120, reps: 3 },
-    { name: 'Shoulder Press', base: 55,  reps: 8 },
-  ];
-  const weeks = [
-    { weeksAgo: 10, mult: 0.65 },
-    { weeksAgo: 8,  mult: 0.73 },
-    { weeksAgo: 6,  mult: 0.82 },
-    { weeksAgo: 4,  mult: 0.89 },
-    { weeksAgo: 2,  mult: 0.95 },
-    { weeksAgo: 0,  mult: 1.00 },
+    { name: 'Bench Press',    base: 135, reps: 5 },
+    { name: 'Squat',          base: 185, reps: 5 },
+    { name: 'Deadlift',       base: 225, reps: 3 },
+    { name: 'Shoulder Press', base: 95,  reps: 8 },
+    { name: 'Barbell Row',    base: 135, reps: 8 },
+    { name: 'Pull-ups',       base: 0,   reps: 10 },
   ];
   const sets = [];
-  weeks.forEach(({ weeksAgo, mult }) => {
-    const date = new Date(now - weeksAgo * 7 * 86400000).toISOString();
+  for (let w = 0; w < 10; w++) {
+    const mult = 0.72 + (w / 10) * 0.28;
+    const date = new Date(now - (10 - w) * 7 * 86400000).toISOString();
     exercises.forEach(({ name, base, reps }) => {
-      const w = Math.round(base * mult / 2.5) * 2.5;
-      for (let s = 0; s < 3; s++) sets.push({ exercise: name, weight: w, reps, date });
+      const weight = base > 0 ? Math.round((base * mult) / 2.5) * 2.5 : 0;
+      for (let s = 0; s < 4; s++) sets.push({ exercise: name, weight, reps, date });
     });
-  });
+  }
   await saveSession(sets);
-  return `📈 ${sets.length} sets sur 6 semaines avec progression claire. Va voir l'onglet Progress !`;
-}
-
-async function trollZach() {
-  const shameful = [
-    { exercise: 'Bench Press',    weight: 5,   reps: 1 },
-    { exercise: 'Squat',          weight: 5,   reps: 1 },
-    { exercise: 'Deadlift',       weight: 10,  reps: 1 },
-    { exercise: 'Biceps Curl',    weight: 2.5, reps: 3 },
-    { exercise: 'Pull-ups',       weight: 0,   reps: 1 },
-    { exercise: 'Lateral Raises', weight: 2.5, reps: 2 },
-    { exercise: 'Shoulder Press', weight: 5,   reps: 1 },
-    { exercise: 'Leg Press',      weight: 10,  reps: 1 },
-  ].map(s => ({ ...s, date: new Date().toISOString() }));
-  await insertRawCloud(shameful, 'Zach');
-  return '🤡 Upload complété. Zach vient de soulever 5 lbs au bench. Historiquement pathétique.';
+  return `📈 ${sets.length} sets sur 10 semaines — progression linéaire claire.`;
 }
 
 async function resetSharedPlan() {
   await supabase.from('shared_plans').upsert({
     id: 'main', plan: {}, updated_by: 'reset', updated_at: new Date().toISOString(),
   });
-  return '🗑️ Plan partagé réinitialisé. Repartez de zéro sur les deux téléphones.';
+  return '🗑️ Plan partagé réinitialisé sur les deux appareils.';
 }
 
-const FORTUNES = [
-  '🔮 Tu vas PR aujourd\'hui. Les planètes sont alignées avec tes biceps.',
-  '🔮 Quelqu\'un te regarde soulever. Impressionne-les ou rentre chez toi.',
-  '🔮 Le miroir ment. Tu es encore plus impressionnant que ça.',
-  '🔮 Skip leg day = mauvais karma pendant 7 générations. Tu as été prévenu.',
-  '🔮 Un jour tu seras plus fort qu\'aujourd\'hui. Ce jour c\'est dans 45 minutes.',
-  '🔮 Ta whey est périmée depuis 2026. L\'odeur c\'est normal, continue.',
-  '🔮 Zach a mangé une poutine hier soir. C\'est ton moment.',
-  '🔮 Le gars qui te regarde faire du squat est jaloux. Écrase-le.',
-  '🔮 37.3% de chance de PR ce soir. Les 62.7% restants sont pour les faibles.',
-  '🔮 Arrête de lire ta fortune et va t\'entraîner. Maintenant.',
-  '🔮 Ton prochain PR arrive. Il attend que tu arrêtes de procrastiner.',
-  '🔮 La douleur d\'aujourd\'hui est la force de demain. Ou juste de la douleur.',
-];
+async function getUserInfo() {
+  const name = await getUserName();
+  if (!name) return '⚠️ Aucun utilisateur connecté (mode local).';
+  const local = await getLogs();
+  const cloud = await getCloudLogs(name);
+  const lastDate = local.length > 0
+    ? new Date(Math.max(...local.map(s => new Date(s.date).getTime()))).toLocaleDateString('fr-CA')
+    : '—';
+  let cloudUsers = '?';
+  try {
+    const { data } = await supabase.from('workout_logs').select('user_name').limit(500);
+    if (data) {
+      cloudUsers = [...new Set(data.map(r => r.user_name).filter(Boolean))].join(', ') || '(aucun)';
+    }
+  } catch {}
+  return (
+    `👤 Utilisateur : ${name}\n` +
+    `📱 Logs locaux : ${local.length}\n` +
+    `☁️  Logs cloud : ${cloud?.length ?? '?'}\n` +
+    `📅 Dernière séance : ${lastDate}\n` +
+    `👥 Utilisateurs cloud : ${cloudUsers}`
+  );
+}
 
-const CAPTIONS = [
-  '"No days off 🔥 #gains #grind #blessed #noedit (filtre Valencia)"',
-  '"Mon seul rival c\'est celui d\'hier 💪 #fitness #lifestyle #growth"',
-  '"Les excuses c\'est pour les gens qui skip leg day. #nodaysoff #hardwork"',
-  '"Si c\'était facile tout le monde le ferait. Mais tout le monde skip. #elite"',
-  '"Dormez pendant que je travaille 😤 #alphamindset #4am #hustle"',
-  '"Mon pré-workout c\'est la douleur de ne pas être à mon niveau. 🧠💥"',
-  '"Pump check obligatoire avant de conduire. Risque de distraction. ⚠️💪"',
-  '"365 jours par an. Sauf le jour où j\'ai skip. On en parle pas. #consistency"',
-];
-
-const EXCUSES_ZACH = [
-  'Il avait mal au poignet depuis 3 semaines.',
-  'Il avait oublié ses écouteurs à la maison.',
-  'Le banc était mouillé (de sueur à lui).',
-  'Il avait pas assez dormi (10h c\'était pas assez).',
-  'Il digérait encore sa dernière séance (de il y a 8 jours).',
-  'La salle sentait bizarre ce jour-là.',
-  'La gravité était particulièrement forte ce matin.',
-  'Son miroir lui renvoyait des ondes négatives.',
-];
-
-const SAIYAN_LEVELS = [
-  { level: 'Chiot de gym', color: '#888' },
-  { level: 'Guerrier de Monday', color: '#aaa' },
-  { level: 'Saiyaman niveau 0.5', color: '#f59e0b' },
-  { level: 'Super Saiyan Bronze', color: '#d97706' },
-  { level: 'Super Saiyan Silver', color: '#9ca3af' },
-  { level: 'Super Saiyan Gold ✨', color: '#FFD700' },
-  { level: 'Ultra Instinct 🌟', color: '#60a5fa' },
-  { level: 'BEAST MODE ABSOLU 🔥', color: '#FF6B00' },
-];
+async function testSupabaseConnection() {
+  try {
+    const t = Date.now();
+    const { error } = await supabase.from('workout_logs').select('user_name').limit(1);
+    const ms = Date.now() - t;
+    if (error) return `❌ Erreur : ${error.message}`;
+    return `✅ Supabase opérationnel — réponse en ${ms} ms.`;
+  } catch (e) {
+    return `❌ Hors ligne ou erreur réseau : ${e.message}`;
+  }
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -221,9 +175,8 @@ export default function DuoScreen() {
   // Dev panel
   const tapCount  = useRef(0);
   const tapTimer  = useRef(null);
-  const [devVisible,  setDevVisible]  = useState(false);
-  const [devLog,      setDevLog]      = useState('');
-  const [devExtra,    setDevExtra]    = useState('');
+  const [devVisible, setDevVisible] = useState(false);
+  const [devLog,     setDevLog]     = useState('');
   const channelRef  = useRef(null);
   const lastLoadRef = useRef(null);
 
@@ -274,7 +227,7 @@ export default function DuoScreen() {
     if (tapCount.current >= 7) {
       tapCount.current = 0;
       Vibration.vibrate(80);
-      setDevLog(''); setDevExtra('');
+      setDevLog('');
       setDevVisible(true);
       return;
     }
@@ -282,11 +235,11 @@ export default function DuoScreen() {
   }
 
   async function runDev(label, fn) {
-    setDevLog('⏳ En cours…'); setDevExtra('');
+    setDevLog('⏳ En cours…');
     try {
       const result = await fn();
       Vibration.vibrate([0, 40, 60, 40]);
-      setDevLog(result ?? `✅ ${label} done!`);
+      setDevLog(result ?? `✅ ${label} terminé.`);
     } catch (e) {
       setDevLog(`❌ Erreur : ${e.message}`);
     }
@@ -310,6 +263,9 @@ export default function DuoScreen() {
   const myLogs     = allLogs[myName] ?? [];
   const rivalLogs  = rival ? (allLogs[rival] ?? []) : [];
 
+  const myPRs    = computeMaxWeights(myLogs);
+  const rivalPRs = rival ? computeMaxWeights(rivalLogs) : {};
+
   const myWeekVol     = computeWeekVolume(myLogs);
   const rivalWeekVol  = computeWeekVolume(rivalLogs);
   const myStreak      = computeStreak(myLogs);
@@ -321,10 +277,17 @@ export default function DuoScreen() {
 
   let myWins = 0, rivalWins = 0;
   sharedExercises.forEach(ex => {
-    const my = myBests[ex], rv = rivalBests[ex];
-    if (est1RM(my.weight, my.reps) >= est1RM(rv.weight, rv.reps)) myWins++;
+    const myW = myPRs[ex]?.weight ?? 0;
+    const rvW = rivalPRs[ex]?.weight ?? 0;
+    if (myW >= rvW) myWins++;
     else rivalWins++;
   });
+
+  const myTotalPR  = sharedExercises.reduce((sum, ex) => sum + lbToKg(myPRs[ex]?.weight ?? 0), 0);
+  const rvTotalPR  = sharedExercises.reduce((sum, ex) => sum + lbToKg(rivalPRs[ex]?.weight ?? 0), 0);
+  const totalGames = myWins + rivalWins;
+  const myWinPct   = totalGames > 0 ? Math.round((myWins   / totalGames) * 100) : 0;
+  const rvWinPct   = totalGames > 0 ? Math.round((rivalWins / totalGames) * 100) : 0;
 
   const overallMsg =
     !rival                       ? null :
@@ -387,9 +350,7 @@ export default function DuoScreen() {
                 <View style={styles.compRow}>
                   <View style={styles.compCol}>
                     <Text style={[styles.compVal, myWeekVol >= rivalWeekVol && styles.compValWin]}>
-                      {myWeekVol >= 1000
-                        ? `${(myWeekVol / 1000).toFixed(1)}k`
-                        : String(Math.round(myWeekVol))}
+                      {fmtKg(myWeekVol)}
                     </Text>
                     <Text style={styles.compUnit}>KG TOTAL</Text>
                     <Text style={styles.compName}>{myName.toUpperCase()}</Text>
@@ -402,9 +363,7 @@ export default function DuoScreen() {
                   <View style={styles.compDivider} />
                   <View style={styles.compCol}>
                     <Text style={[styles.compVal, rivalWeekVol > myWeekVol && styles.compValWin]}>
-                      {rivalWeekVol >= 1000
-                        ? `${(rivalWeekVol / 1000).toFixed(1)}k`
-                        : String(Math.round(rivalWeekVol))}
+                      {fmtKg(rivalWeekVol)}
                     </Text>
                     <Text style={styles.compUnit}>KG TOTAL</Text>
                     <Text style={styles.compName}>{rival.toUpperCase()}</Text>
@@ -493,14 +452,19 @@ export default function DuoScreen() {
                   <View style={styles.scoreCol}>
                     <Text style={styles.scoreName}>{myName.toUpperCase()}</Text>
                     <Text style={[styles.scoreNum, myWins >= rivalWins && styles.scoreNumWin]}>{myWins}</Text>
+                    <Text style={[styles.scoreWinPct, myWins >= rivalWins && { color: '#FF6B00' }]}>{myWinPct}%</Text>
+                    <Text style={styles.scoreTotalPR}>{fmtKg(myTotalPR)} kg</Text>
                   </View>
                   <View style={styles.scoreMiddle}>
-                    <Text style={styles.scoreVS}>VS</Text>
+                    <Text style={styles.scoreVS}>EX. GAGNÉS</Text>
                     <Text style={styles.overallMsg}>{overallMsg}</Text>
+                    <Text style={[styles.scoreVS, { marginTop: 4 }]}>PR TOTAL</Text>
                   </View>
                   <View style={styles.scoreCol}>
                     <Text style={styles.scoreName}>{rival.toUpperCase()}</Text>
                     <Text style={[styles.scoreNum, rivalWins > myWins && styles.scoreNumWin]}>{rivalWins}</Text>
+                    <Text style={[styles.scoreWinPct, rivalWins > myWins && { color: '#FF6B00' }]}>{rvWinPct}%</Text>
+                    <Text style={styles.scoreTotalPR}>{fmtKg(rvTotalPR)} kg</Text>
                   </View>
                 </View>
               )}
@@ -513,27 +477,38 @@ export default function DuoScreen() {
                 </View>
               ) : (
                 <>
-                  <Text style={styles.sectionLabel}>COMPARATIF PAR EXERCICE</Text>
+                  <Text style={styles.sectionLabel}>RECORDS PERSONNELS — PR</Text>
                   {sharedExercises.map(ex => {
-                    const me = myBests[ex], rv = rivalBests[ex];
-                    const my1RM = est1RM(me.weight, me.reps);
-                    const rv1RM = est1RM(rv.weight, rv.reps);
-                    const iWin  = my1RM >= rv1RM;
+                    const mePR = myPRs[ex]  ?? myBests[ex];
+                    const rvPR = rivalPRs[ex] ?? rivalBests[ex];
+                    const myW  = lbToKg(mePR?.weight ?? 0);
+                    const rvW  = lbToKg(rvPR?.weight ?? 0);
+                    const iWin = myW >= rvW;
+                    const gap  = Math.abs(myW - rvW);
                     return (
                       <View key={ex} style={styles.compareCard}>
-                        <Text style={styles.compareEx}>{ex}</Text>
+                        <View style={styles.compareCardHead}>
+                          <Text style={styles.compareEx}>{ex}</Text>
+                          {gap > 0 && (
+                            <View style={styles.gapBadge}>
+                              <Text style={styles.gapTxt}>Écart {gap.toFixed(1)} kg</Text>
+                            </View>
+                          )}
+                        </View>
                         <View style={styles.compareRow}>
                           <View style={[styles.compareBox, iWin && styles.compareBoxWin]}>
+                            {iWin && <Text style={styles.trophyTxt}>🏆</Text>}
                             <Text style={styles.compareName}>{myName.toUpperCase()}</Text>
-                            <Text style={styles.compareMain}>{me.weight} × {me.reps}</Text>
-                            <Text style={styles.compare1RM}>{Math.round(my1RM)} est. 1RM</Text>
-                            {iWin && <View style={styles.winChip}><Text style={styles.winChipText}>PLUS FORT</Text></View>}
+                            <Text style={styles.compareMain}>{myW.toFixed(1)} kg</Text>
+                            <Text style={styles.compareReps}>× {mePR?.reps ?? '—'} reps</Text>
+                            {iWin && <View style={styles.winChip}><Text style={styles.winChipText}>LEADER</Text></View>}
                           </View>
                           <View style={[styles.compareBox, !iWin && styles.compareBoxWin]}>
+                            {!iWin && <Text style={styles.trophyTxt}>🏆</Text>}
                             <Text style={styles.compareName}>{rival.toUpperCase()}</Text>
-                            <Text style={styles.compareMain}>{rv.weight} × {rv.reps}</Text>
-                            <Text style={styles.compare1RM}>{Math.round(rv1RM)} est. 1RM</Text>
-                            {!iWin && <View style={styles.winChip}><Text style={styles.winChipText}>PLUS FORT</Text></View>}
+                            <Text style={styles.compareMain}>{rvW.toFixed(1)} kg</Text>
+                            <Text style={styles.compareReps}>× {rvPR?.reps ?? '—'} reps</Text>
+                            {!iWin && <View style={styles.winChip}><Text style={styles.winChipText}>LEADER</Text></View>}
                           </View>
                         </View>
                       </View>
@@ -552,7 +527,7 @@ export default function DuoScreen() {
                     {myOnly.map(ex => (
                       <View key={ex} style={styles.pendingRow}>
                         <Text style={styles.pendingEx}>{ex}</Text>
-                        <Text style={styles.pendingVal}>Toi : {myBests[ex].weight} × {myBests[ex].reps}</Text>
+                        <Text style={styles.pendingVal}>Toi : {lbToKg(myBests[ex].weight).toFixed(1)} kg × {myBests[ex].reps}</Text>
                       </View>
                     ))}
                   </View>
@@ -569,7 +544,7 @@ export default function DuoScreen() {
                     {rivalOnly.map(ex => (
                       <View key={ex} style={styles.pendingRow}>
                         <Text style={styles.pendingEx}>{ex}</Text>
-                        <Text style={styles.pendingVal}>{rival} : {rivalBests[ex].weight} × {rivalBests[ex].reps}</Text>
+                        <Text style={styles.pendingVal}>{rival} : {lbToKg(rivalBests[ex].weight).toFixed(1)} kg × {rivalBests[ex].reps}</Text>
                       </View>
                     ))}
                   </View>
@@ -584,143 +559,89 @@ export default function DuoScreen() {
       <Modal visible={devVisible} transparent animationType="slide">
         <View style={styles.devOverlay}>
           <View style={styles.devPanel}>
-            <View style={styles.devTitleRow}>
-              <Text style={styles.devTitle}>🛠️ DEV PANEL</Text>
-              <Text style={styles.devSubtitle}>zone secrète · accès interdit aux normies 🤫</Text>
-            </View>
+            <View style={styles.devHandle} />
+            <Text style={styles.devTitle}>🛠️ Dev Panel</Text>
 
-            {devLog   ? <Text style={styles.devLog}>{devLog}</Text>   : null}
-            {devExtra ? <Text style={styles.devExtra}>{devExtra}</Text> : null}
+            {devLog ? <Text style={styles.devLog}>{devLog}</Text> : null}
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-              <Text style={styles.devCat}>💪 ENTRAÎNEMENT</Text>
+              <Text style={styles.devCat}>DONNÉES DE TEST</Text>
 
-              <DevBtn color="#1a3a1a" icon="📅" label="Seed 3 semaines d'historique"
-                sub="Peuple Progress + Duo avec de vraies données"
-                onPress={() => runDev('Seed', seedFakeHistory)} />
+              <DevBtn
+                icon="📊"
+                label="Seed 3 semaines d'historique"
+                sub="~250 sets répartis sur 7 jours × 3 semaines"
+                onPress={() => runDev('Seed', seedFakeHistory)}
+              />
+              <DevBtn
+                icon="📈"
+                label="Seed progression sur 10 semaines"
+                sub="Progression linéaire pour tester les graphiques"
+                onPress={() => runDev('Progression', seedProgressionData)}
+              />
 
-              <DevBtn color="#0a2a1a" icon="📈" label="Test graphique de progression"
-                sub="6 semaines avec montée claire — vérifie que le chart marche"
-                onPress={() => runDev('Chart', testProgressChart)} />
+              <Text style={styles.devCat}>DIAGNOSTIC</Text>
 
-              <DevBtn color="#3a1a00" icon="🐐" label="Devenir the GOAT"
-                sub="405 bench · 900 squat · 1000 deadlift · légendaire"
-                onPress={() => runDev('GOAT', becomeGoat, true)} />
+              <DevBtn
+                icon="👤"
+                label="Infos utilisateur"
+                sub="Nom, nb de logs locaux et cloud, utilisateurs actifs"
+                onPress={() => runDev('Info', getUserInfo)}
+              />
+              <DevBtn
+                icon="🔌"
+                label="Test connexion Supabase"
+                sub="Vérifie la latence et l'état de la base de données"
+                onPress={() => runDev('Ping', testSupabaseConnection)}
+              />
 
-              <DevBtn color="#1a001a" icon="🕵️" label="Zach est un fraud"
-                sub="Bats chacun de ses lifts exactement par 1 lb"
-                onPress={() => runDev('Fraud', zachIsAFraud)} />
+              <Text style={styles.devCat}>SYNCHRONISATION</Text>
 
-              <DevBtn color="#2a0a2a" icon="🤡" label="Troll Zach dans le cloud"
-                sub="Upload ses PRs : 5 lbs bench 1 rep. RIP Zach."
-                onPress={() => runDev('Troll', trollZach, true)} />
-
-              <DevBtn color="#001a3a" icon="💊" label="Calcule ton niveau Saiyan"
-                sub="Évalue ton potentiel génétique objectivement"
-                onPress={() => runDev('Saiyan', async () => {
-                  const lvl = pick(SAIYAN_LEVELS);
-                  setDevExtra(`Niveau : ${lvl.level}`);
-                  return `🧬 Analyse génétique complète.\nRésultat : ${lvl.level}\nFiabilité : ${rand(87, 99)}% · Méthode : NASA + intuition`;
-                })} />
-
-              <Text style={styles.devCat}>🎭 SOCIAL & INUTILE</Text>
-
-
-              <DevBtn color="#0a0a2a" icon="🔮" label="Fortune du jour"
-                sub="La vérité sur ton prochain entraînement"
-                onPress={() => runDev('Fortune', async () => pick(FORTUNES))} />
-
-              <DevBtn color="#1a1a00" icon="🎵" label="Caption Instagram cringe"
-                sub="Pour ton prochain post motivationnel #nodaysoff"
-                onPress={() => runDev('Caption', async () => pick(CAPTIONS))} />
-
-              <DevBtn color="#2a0020" icon="😅" label="Excuse de Zach du jour"
-                sub="Pourquoi il a pas pu s'entraîner cette semaine"
-                onPress={() => runDev('Excuse', async () => {
-                  const ex = pick(EXCUSES_ZACH);
-                  return `📋 Rapport officiel :\n"${ex}"\n\n— Service d'Investigation des Excuses de Gym`;
-                })} />
-
-              <Text style={styles.devCat}>📊 ANALYTICS ABSURDES</Text>
-
-              <DevBtn color="#003a1a" icon="🍕" label="Pizzas brûlées cette semaine"
-                sub="Ton vrai ROI calorique en pepperoni"
-                onPress={() => runDev('Pizzas', async () => {
-                  const n = rand(3, 47);
-                  const recom = Math.ceil(n * 0.6);
-                  return `🍕 Calories brûlées ≈ ${n} pizzas entières.\nRecommandation scientifique : mange-en ${recom} ce soir pour maintenir le déficit.`;
-                })} />
-
-              <DevBtn color="#1a0a00" icon="💸" label="ROI de ton abonnement salle"
-                sub="T'as payé combien par séance ce mois ?"
-                onPress={() => runDev('ROI', async () => {
-                  const s = rand(6, 24);
-                  const roi = (29.99 / s).toFixed(2);
-                  const verdict = s > 15 ? '✅ Rentable.' : s > 8 ? '⚠️ Bof.' : '❌ Honteux.';
-                  return `💸 ${s} séances ce mois = ${roi}$/séance.\n${verdict}\nZach : ${rand(1, 3)} séances = ${(29.99 / rand(1, 3)).toFixed(2)}$/séance. 💀`;
-                })} />
-
-              <DevBtn color="#00001a" icon="🧮" label="Calcule ta force absolue"
-                sub="Ton total powerlifting estimé en kg"
-                onPress={() => runDev('Force', async () => {
-                  const total = rand(280, 950);
-                  const percentile = rand(60, 99);
-                  return `🏋️ Total estimé : ${total} kg\nTop ${100 - percentile}% mondial · ${percentile}e percentile\nZach est probablement top ${rand(1, 15)}% du bas.`;
-                })} />
-
-              <DevBtn color="#1a001a" icon="🎲" label="Programme de séance random absurde"
-                sub="Un workout généré par l'IA (très bad IA)"
-                onPress={() => runDev('Random', async () => {
-                  const weird = [
-                    `${rand(100, 999)} jumping jacks sans s'arrêter`,
-                    `${rand(50, 200)} burpees en pensant à Zach`,
-                    `Tenir un squat ${rand(5, 20)} minutes en fixant quelqu'un`,
-                    `${rand(10, 50)} tours de salle en courant (pas en marchant)`,
-                    `${rand(3, 8)} séries de "rien" pour le mental`,
-                    `Regarder quelqu'un faire du leg press et juger`,
-                    `${rand(20, 100)} pompes ou excuses (selon l'humeur)`,
-                  ];
-                  const selected = weird.sort(() => Math.random() - 0.5).slice(0, 4);
-                  return `🎲 Programme du jour :\n${selected.map((w, i) => `${i + 1}. ${w}`).join('\n')}\n\nDurée estimée : ${rand(25, 90)} min`;
-                })} />
-
-              <Text style={styles.devCat}>⚙️ TECHNIQUE</Text>
-
-              <DevBtn color="#002a2a" icon="🔄" label="Force reload tous les phones"
-                sub="Recharge l'app sur tous les appareils connectés"
+              <DevBtn
+                icon="🔄"
+                label="Reload tous les appareils"
+                sub="Envoie un signal de rechargement via Supabase Realtime"
                 onPress={() => runDev('Reload', async () => {
                   await fireReloadAll();
-                  return '🔄 Signal envoyé. L\'app redémarre sur tous les téléphones.';
-                })} />
+                  return '🔄 Signal envoyé — rechargement en cours sur tous les appareils.';
+                })}
+              />
 
-              <Text style={styles.devCat}>☢️ DANGER ZONE</Text>
+              <Text style={styles.devCat}>DANGER ZONE</Text>
 
-              <DevBtn color="#1a1000" icon="🗑️" label="Reset plan partagé"
-                sub="Remet le plan partagé à zéro sur les deux téléphones"
-                onPress={() => runDev('ResetPlan', resetSharedPlan)} />
-
-              <DevBtn color="#3a0000" icon="☢️" label="Nuclear Reset — TOUT effacer"
-                sub="Supprime TOI + ZACH du cloud. Irréversible à jamais."
+              <DevBtn
+                icon="🗑️"
+                label="Reset plan partagé"
+                sub="Remet le plan partagé à zéro (local + cloud)"
+                danger
+                onPress={() => runDev('ResetPlan', resetSharedPlan)}
+              />
+              <DevBtn
+                icon="☢️"
+                label="Nuclear Reset"
+                sub="Supprime toutes les données locales et cloud — irréversible"
+                danger
                 onPress={() => runDev('Nuclear', () => new Promise(resolve => {
                   Alert.alert(
-                    '☢️ Nuclear Reset',
-                    'Supprimer TOUT l\'historique — toi ET Zach — pour toujours ?\n\nIl n\'y a pas de retour en arrière.',
+                    'Nuclear Reset',
+                    'Supprimer TOUTES les données (local + cloud) ?\n\nCette action est irréversible.',
                     [
-                      { text: 'Annuler', style: 'cancel', onPress: () => resolve('Annulé. Sage décision.') },
-                      { text: '💣 TOUT DÉTRUIRE', style: 'destructive', onPress: async () => {
+                      { text: 'Annuler', style: 'cancel', onPress: () => resolve('Annulé.') },
+                      { text: 'Tout supprimer', style: 'destructive', onPress: async () => {
                         await clearAllUsersLogs();
-                        resolve('☢️ Effacé. Toi + Zach = zéro. Repartez de zéro. Bonne chance.');
+                        resolve('Données effacées — local et cloud.');
                       }},
                     ],
                     { cancelable: true, onDismiss: () => resolve('Annulé.') }
                   );
-                }))} />
+                }))}
+              />
 
             </ScrollView>
 
             <TouchableOpacity style={styles.devClose} onPress={() => setDevVisible(false)}>
-              <Text style={styles.devCloseTxt}>FERMER LE PANNEAU SECRET</Text>
+              <Text style={styles.devCloseTxt}>FERMER</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -729,14 +650,19 @@ export default function DuoScreen() {
   );
 }
 
-function DevBtn({ color, icon, label, sub, onPress }) {
+function DevBtn({ icon, label, sub, onPress, danger }) {
   return (
-    <TouchableOpacity style={[styles.devBtn, { backgroundColor: color }]} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={[styles.devBtn, danger && styles.devBtnDanger]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
       <Text style={styles.devBtnIcon}>{icon}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={styles.devBtnLabel}>{label}</Text>
+        <Text style={[styles.devBtnLabel, danger && { color: '#EF4444' }]}>{label}</Text>
         <Text style={styles.devBtnSub}>{sub}</Text>
       </View>
+      <Ionicons name="chevron-forward" size={14} color="#333" />
     </TouchableOpacity>
   );
 }
@@ -800,18 +726,28 @@ const styles = StyleSheet.create({
   loadingText: { color: '#999999', fontSize: 14 },
 
   // Dev panel
-  devOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'flex-end' },
-  devPanel:    { backgroundColor: '#0d0d0d', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 36, borderTopWidth: 1, borderColor: '#222', maxHeight: '93%' },
-  devTitleRow: { marginBottom: 12 },
-  devTitle:    { fontSize: 24, fontWeight: '900', color: '#FFFFFF', marginBottom: 2 },
-  devSubtitle: { fontSize: 11, color: '#484848', letterSpacing: 0.5 },
-  devLog:      { fontSize: 13, color: '#4ade80', marginBottom: 8, fontWeight: '600', lineHeight: 20, backgroundColor: '#0a1a0a', borderRadius: 10, padding: 10 },
-  devExtra:    { fontSize: 14, color: '#a78bfa', marginBottom: 10, fontWeight: '700', fontStyle: 'italic' },
-  devCat:      { fontSize: 10, fontWeight: '800', color: '#444', letterSpacing: 2, marginTop: 14, marginBottom: 8, textTransform: 'uppercase' },
-  devBtn:      { flexDirection: 'row', alignItems: 'center', borderRadius: 14, padding: 13, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: '#1a1a1a' },
-  devBtnIcon:  { fontSize: 26, width: 32, textAlign: 'center' },
-  devBtnLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginBottom: 2 },
-  devBtnSub:   { color: '#555', fontSize: 11 },
-  devClose:    { marginTop: 12, alignItems: 'center', paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: '#222', backgroundColor: '#111' },
-  devCloseTxt: { color: '#444', fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+  devOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  devPanel:    { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, borderTopWidth: 1, borderColor: '#1a1a1a', maxHeight: '88%' },
+  devHandle:   { width: 36, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  devTitle:    { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 12, letterSpacing: 0.3 },
+  devLog:      { fontSize: 13, color: '#4ade80', marginBottom: 10, fontWeight: '600', lineHeight: 19, backgroundColor: '#0d1a0d', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#1a3a1a' },
+  devCat:      { fontSize: 9, fontWeight: '800', color: '#333', letterSpacing: 2, marginTop: 16, marginBottom: 6, textTransform: 'uppercase' },
+  devBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 14, marginBottom: 6, gap: 12, borderWidth: 1, borderColor: '#1e1e1e' },
+  devBtnDanger:{ borderColor: '#2a0000', backgroundColor: '#130000' },
+  devBtnIcon:  { fontSize: 20, width: 28, textAlign: 'center' },
+  devBtnLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  devBtnSub:   { color: '#444', fontSize: 11, lineHeight: 15 },
+  devClose:    { marginTop: 14, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#1e1e1e', backgroundColor: '#111' },
+  devCloseTxt: { color: '#333', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
+
+  // Enhanced scoreboard
+  scoreWinPct:  { fontSize: 13, fontWeight: '700', color: '#484848', marginTop: 2 },
+  scoreTotalPR: { fontSize: 10, color: '#484848', marginTop: 4, fontWeight: '600' },
+
+  // PR comparison cards
+  compareCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  gapBadge:        { backgroundColor: '#1A1A1A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#242424' },
+  gapTxt:          { fontSize: 10, color: '#999999', fontWeight: '600' },
+  trophyTxt:       { fontSize: 16, marginBottom: 4 },
+  compareReps:     { fontSize: 12, color: '#484848', marginBottom: 8 },
 });

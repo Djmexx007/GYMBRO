@@ -58,9 +58,13 @@ export const DEFAULT_LIBRARY = [
   'Kettlebell Swings', 'Sled Push', 'Battle Ropes', 'Tire Flip',
   'Burpees', 'Mountain Climbers', 'Sprints', 'Stair Climber',
 
-  // ── GRIP / FOREARMS ──────────────────────────────────────────────────────
+  // ── GRIP / AVANT-BRAS ────────────────────────────────────────────────────
   "Farmer's Walk", 'Wrist Curls', 'Reverse Wrist Curls',
+  'Dumbbell Wrist Curl', 'Reverse Dumbbell Wrist Curl',
+  'Behind the Back Wrist Curl', 'Wrist Extension', 'Pronation Curls',
   'Bar Hangs', 'Plate Pinch', 'Towel Pull-ups',
+  'Wrist Roller', 'Grippers', 'Pinch Grip Carries', 'Barbell Holds',
+  'Trap Bar Farmer Walk', 'Single Arm Farmers Walk',
 
   // ── OLYMPIC / POWER ──────────────────────────────────────────────────────
   'Power Clean', 'Hang Clean', 'Push Press', 'Clean and Jerk', 'Snatch',

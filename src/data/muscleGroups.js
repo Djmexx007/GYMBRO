@@ -91,10 +91,10 @@ export const MUSCLE_GROUPS = {
   'Concentration Curl':        { primary: ['Biceps (chef court)'],            secondary: [] },
   'Incline Dumbbell Curl':     { primary: ['Biceps (chef long)'],             secondary: [] },
   'Cable Curl':                { primary: ['Biceps (chef long)', 'Biceps (chef court)'], secondary: [] },
-  'Reverse Curl':              { primary: ['Brachioradialis', 'Brachialis'],   secondary: ['Avant-bras'] },
-  'Zottman Curl':              { primary: ['Biceps (chef long)'],             secondary: ['Brachialis', 'Avant-bras'] },
+  'Reverse Curl':              { primary: ['Brachioradialis', 'Brachialis'],   secondary: ['Avant-bras (extenseurs)', 'Pronateur teres'] },
+  'Zottman Curl':              { primary: ['Biceps (chef long)'],             secondary: ['Brachialis', 'Avant-bras (fléchisseurs)', 'Pronateur teres'] },
   'Spider Curl':               { primary: ['Biceps (chef court)'],            secondary: [] },
-  'Cross Body Curl':           { primary: ['Brachialis'],                     secondary: ['Biceps (chef long)', 'Avant-bras'] },
+  'Cross Body Curl':           { primary: ['Brachialis'],                     secondary: ['Biceps (chef long)', 'Avant-bras (fléchisseurs)'] },
   'EZ Bar Curl':               { primary: ['Biceps (chef long)', 'Biceps (chef court)'], secondary: [] },
   'Barbell Curl':              { primary: ['Biceps (chef long)', 'Biceps (chef court)'], secondary: [] },
 
@@ -158,11 +158,16 @@ export const MUSCLE_GROUPS = {
   'Mountain Climbers':         { primary: ['Core (profond)'],                 secondary: ['Quadriceps'] },
 
   // ── GRIP / AVANT-BRAS ──────────────────────────────────────────────────────
-  'Wrist Curls':               { primary: ['Avant-bras'],                     secondary: [] },
-  'Reverse Wrist Curls':       { primary: ['Avant-bras'],                     secondary: [] },
-  "Farmer's Walk":             { primary: ['Avant-bras', 'Trapèzes (supérieurs)'], secondary: ['Core (profond)'] },
-  'Plate Pinch':               { primary: ['Avant-bras'],                     secondary: [] },
-  'Bar Hangs':                 { primary: ['Avant-bras'],                     secondary: ['Grand dorsal'] },
+  'Wrist Curls':               { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
+  'Reverse Wrist Curls':       { primary: ['Avant-bras (extenseurs)'],        secondary: [] },
+  'Dumbbell Wrist Curl':       { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
+  'Reverse Dumbbell Wrist Curl':{ primary: ['Avant-bras (extenseurs)'],       secondary: [] },
+  'Behind the Back Wrist Curl':{ primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
+  'Wrist Extension':           { primary: ['Avant-bras (extenseurs)'],        secondary: [] },
+  'Pronation Curls':           { primary: ['Pronateur teres'],                secondary: ['Avant-bras (fléchisseurs)'] },
+  "Farmer's Walk":             { primary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (profond)'] },
+  'Plate Pinch':               { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
+  'Bar Hangs':                 { primary: ['Avant-bras (fléchisseurs)'],      secondary: ['Grand dorsal'] },
 
   // ── CALISTHENICS ──────────────────────────────────────────────────────────
   'Planche Lean':              { primary: ['Épaules (antérieures)'],          secondary: ['Core (profond)', 'Pectoraux (milieu)'] },
@@ -306,7 +311,7 @@ export const MUSCLE_GROUPS = {
   '21s':                                  { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis'] },
   'Machine Curl':                         { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis'] },
   'Prone Incline Curl':                   { primary: ['Biceps (chef long)'],                      secondary: ['Brachialis', 'Brachioradialis'] },
-  'Reverse EZ Bar Curl':                  { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Avant-bras'] },
+  'Reverse EZ Bar Curl':                  { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Avant-bras (extenseurs)', 'Pronateur teres'] },
   'TRX Curl':                             { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis', 'Core (profond)'] },
   'Wide Grip Barbell Curl':               { primary: ['Biceps (chef court)'],                     secondary: ['Brachialis', 'Brachioradialis'] },
   'Narrow Grip Barbell Curl':             { primary: ['Biceps (chef long)'],                      secondary: ['Brachialis'] },
@@ -391,7 +396,7 @@ export const MUSCLE_GROUPS = {
   'Landmine Rotation':                    { primary: ['Core (obliques)'],                         secondary: ['Épaules (antérieures)', 'Core (profond)'] },
   'Turkish Get-up':                       { primary: ['Core (profond)'],                          secondary: ['Épaules (antérieures)', 'Quadriceps', 'Fessiers', 'Core (obliques)'] },
   'Windmill':                             { primary: ['Core (obliques)'],                         secondary: ['Épaules (latérales)', 'Ischio-jambiers', 'Core (profond)'] },
-  'Suitcase Carry':                       { primary: ['Core (obliques)'],                         secondary: ['Avant-bras', 'Trapèzes (supérieurs)', 'Core (profond)'] },
+  'Suitcase Carry':                       { primary: ['Core (obliques)'],                         secondary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)', 'Core (profond)'] },
   'Weighted Plank':                       { primary: ['Core (profond)'],                          secondary: ['Épaules (antérieures)', 'Fessiers'] },
   'RKC Plank':                            { primary: ['Core (profond)'],                          secondary: ['Fessiers', 'Quadriceps'] },
   'Long Lever Plank':                     { primary: ['Core (profond)'],                          secondary: ['Épaules (antérieures)', 'Fessiers'] },
@@ -421,7 +426,7 @@ export const MUSCLE_GROUPS = {
   'Archer Pull-ups':                      { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Core (obliques)'] },
   'Archer Chin-ups':                      { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Biceps (chef court)', 'Grand rond'] },
   'One Arm Pull-up':                      { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Core (obliques)'] },
-  'False Grip Pull-ups':                  { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Avant-bras', 'Grand rond'] },
+  'False Grip Pull-ups':                  { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Avant-bras (fléchisseurs)', 'Grand rond'] },
   'L-sit Pull-ups':                       { primary: ['Grand dorsal', 'Core (profond)'],          secondary: ['Biceps (chef long)', 'Grand rond'] },
   'L-sit Chin-ups':                       { primary: ['Grand dorsal', 'Core (profond)'],          secondary: ['Biceps (chef long)', 'Biceps (chef court)'] },
   'Tuck Front Lever':                     { primary: ['Grand dorsal', 'Core (profond)'],          secondary: ['Grand rond', 'Biceps (chef long)', 'Dentelé antérieur'] },
@@ -440,7 +445,7 @@ export const MUSCLE_GROUPS = {
   'Ice Cream Maker':                      { primary: ['Grand dorsal', 'Core (profond)'],          secondary: ['Biceps (chef long)', 'Grand rond', 'Dentelé antérieur'] },
   'Single Arm Ring Row':                  { primary: ['Grand dorsal', 'Rhomboïdes'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Core (obliques)'] },
   'Elbow Lever':                          { primary: ['Core (profond)', 'Épaules (antérieures)'], secondary: ['Triceps (latéral)'] },
-  'Crow Stand':                           { primary: ['Core (profond)', 'Épaules (antérieures)'], secondary: ['Avant-bras', 'Triceps (latéral)'] },
+  'Crow Stand':                           { primary: ['Core (profond)', 'Épaules (antérieures)'], secondary: ['Avant-bras (fléchisseurs)', 'Triceps (latéral)'] },
   'Handstand Walk':                       { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Core (profond)', 'Dentelé antérieur'] },
 
   // ── POWERLIFTING – Variantes compétition ────────────────────────────────────
@@ -482,24 +487,24 @@ export const MUSCLE_GROUPS = {
 
   // ── STRONGMAN ───────────────────────────────────────────────────────────────
   'Log Clean and Press':                  { primary: ['Quadriceps', 'Fessiers', 'Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Ischio-jambiers', 'Trapèzes (supérieurs)', 'Triceps (latéral)'] },
-  'Axle Bar Deadlift':                    { primary: ['Fessiers', 'Ischio-jambiers', 'Érecteurs'],secondary: ['Grand dorsal', 'Avant-bras', 'Trapèzes (supérieurs)'] },
-  'Axle Bar Clean and Press':             { primary: ['Quadriceps', 'Fessiers', 'Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Ischio-jambiers', 'Triceps (latéral)', 'Trapèzes (supérieurs)', 'Avant-bras'] },
+  'Axle Bar Deadlift':                    { primary: ['Fessiers', 'Ischio-jambiers', 'Érecteurs'],secondary: ['Grand dorsal', 'Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'] },
+  'Axle Bar Clean and Press':             { primary: ['Quadriceps', 'Fessiers', 'Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Ischio-jambiers', 'Triceps (latéral)', 'Trapèzes (supérieurs)', 'Avant-bras (fléchisseurs)'] },
   'Yoke Walk':                            { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Érecteurs', 'Core (profond)', 'Trapèzes (supérieurs)', 'Gastrocnémien'] },
   'Atlas Stone Lift':                     { primary: ['Fessiers', 'Érecteurs'],                   secondary: ['Quadriceps', 'Ischio-jambiers', 'Biceps (chef long)', 'Core (profond)'] },
   'Atlas Stone to Box':                   { primary: ['Fessiers', 'Érecteurs'],                   secondary: ['Quadriceps', 'Ischio-jambiers', 'Biceps (chef long)', 'Core (profond)'] },
-  'Keg Carry':                            { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Core (profond)', 'Érecteurs', 'Avant-bras'] },
-  'Sandbag Carry':                        { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Érecteurs', 'Core (profond)', 'Avant-bras'] },
+  'Keg Carry':                            { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Core (profond)', 'Érecteurs', 'Avant-bras (fléchisseurs)'] },
+  'Sandbag Carry':                        { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Érecteurs', 'Core (profond)', 'Avant-bras (fléchisseurs)'] },
   'Sandbag to Shoulder':                  { primary: ['Fessiers', 'Érecteurs'],                   secondary: ['Quadriceps', 'Ischio-jambiers', 'Core (profond)'] },
   'Keg Toss':                             { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Érecteurs', 'Épaules (antérieures)'] },
   'Duck Walk':                            { primary: ['Quadriceps'],                              secondary: ['Fessiers', 'Adducteurs', 'Core (profond)'] },
-  'Crucifix Hold':                        { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs', 'Trapèzes (supérieurs)', 'Avant-bras'] },
-  'Arm Over Arm Pull':                    { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Avant-bras', 'Rhomboïdes'] },
+  'Crucifix Hold':                        { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs', 'Trapèzes (supérieurs)', 'Avant-bras (fléchisseurs)'] },
+  'Arm Over Arm Pull':                    { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Avant-bras (fléchisseurs)', 'Rhomboïdes'] },
   'Sled Drag':                            { primary: ['Ischio-jambiers', 'Fessiers'],             secondary: ['Érecteurs', 'Gastrocnémien'] },
-  'Sled Pull':                            { primary: ['Grand dorsal', 'Biceps (chef long)'],      secondary: ['Grand rond', 'Rhomboïdes', 'Avant-bras'] },
+  'Sled Pull':                            { primary: ['Grand dorsal', 'Biceps (chef long)'],      secondary: ['Grand rond', 'Rhomboïdes', 'Avant-bras (fléchisseurs)'] },
 
   // ── KETTLEBELL ───────────────────────────────────────────────────────────────
-  'Kettlebell Clean':                     { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Ischio-jambiers', 'Érecteurs', 'Avant-bras'] },
-  'Kettlebell Snatch':                    { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Ischio-jambiers', 'Érecteurs', 'Épaules (antérieures)', 'Avant-bras'] },
+  'Kettlebell Clean':                     { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Ischio-jambiers', 'Érecteurs', 'Avant-bras (fléchisseurs)'] },
+  'Kettlebell Snatch':                    { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Ischio-jambiers', 'Érecteurs', 'Épaules (antérieures)', 'Avant-bras (fléchisseurs)'] },
   'Kettlebell Press':                     { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Triceps (latéral)', 'Core (profond)'] },
   'Kettlebell Jerk':                      { primary: ['Quadriceps', 'Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Fessiers', 'Triceps (latéral)'] },
   'Kettlebell Clean and Press':           { primary: ['Quadriceps', 'Fessiers', 'Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Ischio-jambiers', 'Triceps (latéral)', 'Érecteurs'] },
@@ -513,22 +518,22 @@ export const MUSCLE_GROUPS = {
   'Kettlebell Front Squat':               { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Érecteurs', 'Core (profond)'] },
   'Kettlebell Lunge':                     { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Ischio-jambiers'] },
   'Kettlebell Hip Thrust':                { primary: ['Fessiers'],                                secondary: ['Ischio-jambiers', 'Moyen fessier'] },
-  'Bottoms Up Press':                     { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Coiffe des rotateurs', 'Avant-bras'] },
+  'Bottoms Up Press':                     { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Coiffe des rotateurs', 'Avant-bras (fléchisseurs)', 'Pronateur teres'] },
   'Single Arm Kettlebell Swing':          { primary: ['Fessiers', 'Ischio-jambiers'],             secondary: ['Érecteurs', 'Core (obliques)', 'Épaules (antérieures)'] },
   'Double Kettlebell Swings':             { primary: ['Fessiers', 'Ischio-jambiers'],             secondary: ['Érecteurs', 'Core (profond)', 'Épaules (antérieures)'] },
-  'Kettlebell Figure 8':                  { primary: ['Core (obliques)'],                         secondary: ['Fessiers', 'Avant-bras', 'Core (profond)'] },
-  'Kettlebell Carry':                     { primary: ['Trapèzes (supérieurs)', 'Avant-bras'],     secondary: ['Core (profond)', 'Quadriceps'] },
+  'Kettlebell Figure 8':                  { primary: ['Core (obliques)'],                         secondary: ['Fessiers', 'Avant-bras (fléchisseurs)', 'Core (profond)'] },
+  'Kettlebell Carry':                     { primary: ['Trapèzes (supérieurs)', 'Avant-bras (fléchisseurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (profond)', 'Quadriceps'] },
 
   // ── GRIP / AVANT-BRAS – Variantes supplémentaires ───────────────────────────
-  'Towel Pull-ups':                       { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Avant-bras', 'Brachialis'] },
-  'Thick Bar Curls':                      { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Avant-bras', 'Brachialis'] },
-  'Wrist Roller':                         { primary: ['Avant-bras'],                              secondary: [] },
-  'Pinch Grip Carries':                   { primary: ['Avant-bras'],                              secondary: ['Trapèzes (supérieurs)'] },
-  'Hub Lift':                             { primary: ['Avant-bras'],                              secondary: [] },
-  'Grippers':                             { primary: ['Avant-bras'],                              secondary: [] },
-  'Barbell Holds':                        { primary: ['Avant-bras'],                              secondary: ['Trapèzes (supérieurs)'] },
-  'Trap Bar Farmer Walk':                 { primary: ['Avant-bras', 'Trapèzes (supérieurs)'],     secondary: ['Core (profond)', 'Quadriceps'] },
-  'Offset Farmer Walk':                   { primary: ['Avant-bras', 'Trapèzes (supérieurs)'],     secondary: ['Core (obliques)', 'Core (profond)'] },
+  'Towel Pull-ups':                       { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Avant-bras (fléchisseurs)', 'Brachialis'] },
+  'Thick Bar Curls':                      { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Avant-bras (fléchisseurs)', 'Brachialis'] },
+  'Wrist Roller':                         { primary: ['Avant-bras (fléchisseurs)', 'Avant-bras (extenseurs)'], secondary: [] },
+  'Pinch Grip Carries':                   { primary: ['Avant-bras (fléchisseurs)'],               secondary: ['Trapèzes (supérieurs)'] },
+  'Hub Lift':                             { primary: ['Avant-bras (fléchisseurs)'],               secondary: [] },
+  'Grippers':                             { primary: ['Avant-bras (fléchisseurs)'],               secondary: [] },
+  'Barbell Holds':                        { primary: ['Avant-bras (fléchisseurs)'],               secondary: ['Trapèzes (supérieurs)'] },
+  'Trap Bar Farmer Walk':                 { primary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (profond)', 'Quadriceps'] },
+  'Offset Farmer Walk':                   { primary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (obliques)', 'Core (profond)'] },
 
   // ── CARDIO / CONDITIONING – Variantes supplémentaires ──────────────────────
   'Ski Erg':                              { primary: ['Grand dorsal'],                            secondary: ['Core (profond)', 'Triceps (long chef)', 'Grand rond'] },
@@ -539,7 +544,7 @@ export const MUSCLE_GROUPS = {
   'Incline Treadmill Walk':               { primary: ['Fessiers', 'Quadriceps'],                  secondary: ['Gastrocnémien', 'Ischio-jambiers'] },
   'Elliptical':                           { primary: ['Quadriceps', 'Fessiers'],                  secondary: ['Ischio-jambiers', 'Épaules (antérieures)'] },
   'Cycling':                              { primary: ['Quadriceps'],                              secondary: ['Fessiers', 'Ischio-jambiers', 'Gastrocnémien'] },
-  'Rope Climb':                           { primary: ['Grand dorsal', 'Avant-bras'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Brachialis', 'Core (profond)'] },
+  'Rope Climb':                           { primary: ['Grand dorsal', 'Avant-bras (fléchisseurs)'], secondary: ['Biceps (chef long)', 'Grand rond', 'Brachialis', 'Core (profond)'] },
   'Rope Slam':                            { primary: ['Core (profond)', 'Épaules (antérieures)'], secondary: ['Grand dorsal', 'Triceps (long chef)', 'Core (obliques)'] },
   'Sled Row':                             { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Ischio-jambiers'] },
   'Double Unders':                        { primary: ['Gastrocnémien', 'Soléaire'],               secondary: ['Core (profond)', 'Épaules (antérieures)'] },
@@ -556,7 +561,7 @@ export const MUSCLE_GROUPS = {
   'Overhead Press (Barbell)':             { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Triceps (latéral)', 'Trapèzes (supérieurs)', 'Dentelé antérieur'] },
   'Neutral Grip Overhead Press':          { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Triceps (latéral)', 'Coiffe des rotateurs'] },
   'Kettlebell Overhead Squat':            { primary: ['Quadriceps'],                              secondary: ['Fessiers', 'Érecteurs', 'Épaules (latérales)', 'Core (profond)'] },
-  'Single Arm Farmers Walk':             { primary: ['Avant-bras', 'Trapèzes (supérieurs)'],     secondary: ['Core (obliques)', 'Core (profond)'] },
+  'Single Arm Farmers Walk':             { primary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (obliques)', 'Core (profond)'] },
   'Standing Calf Raises (Machine)':       { primary: ['Gastrocnémien'],                           secondary: ['Soléaire'] },
   'Leg Press Calf Raises':                { primary: ['Gastrocnémien', 'Soléaire'],               secondary: [] },
   'Incline Treadmill Run':                { primary: ['Quadriceps', 'Fessiers', 'Ischio-jambiers'],secondary: ['Gastrocnémien', 'Moyen fessier'] },
@@ -571,7 +576,7 @@ export const HIGH_LEVEL_GROUPS = {
   Triceps:         { icon: '🔱', color: '#FB923C', subMuscles: ['Triceps (long chef)', 'Triceps (latéral)', 'Triceps (médial)'] },
   Épaules:         { icon: '🏋️', color: '#FBBF24', subMuscles: ['Épaules (antérieures)', 'Épaules (latérales)', 'Épaules (postérieures)', 'Coiffe des rotateurs'] },
   Jambes:          { icon: '🦵', color: '#F87171', subMuscles: ['Quadriceps', 'Ischio-jambiers', 'Fessiers', 'Moyen fessier', 'Petit fessier', 'Adducteurs', 'Gastrocnémien', 'Soléaire'] },
-  'Avant-bras':    { icon: '🤛', color: '#94A3B8', subMuscles: ['Avant-bras'] },
+  'Avant-bras':    { icon: '🤛', color: '#94A3B8', subMuscles: ['Avant-bras (fléchisseurs)', 'Avant-bras (extenseurs)', 'Pronateur teres'] },
   'Core · Cardio': { icon: '⚡', color: '#E879F9', subMuscles: ['Core (profond)', 'Core (obliques)'] },
 };
 
@@ -607,7 +612,9 @@ const SHORT_LABELS = {
   'Adducteurs':              'Adduct.',
   'Gastrocnémien':           'Gastro.',
   'Soléaire':                'Soléaire',
-  'Avant-bras':              'Avant-bras',
+  'Avant-bras (fléchisseurs)': 'Fléch.',
+  'Avant-bras (extenseurs)':   'Extens.',
+  'Pronateur teres':            'Pronateur',
   'Core (profond)':          'Profond',
   'Core (obliques)':         'Obliques',
 };
@@ -628,7 +635,58 @@ export const FATIGUE_WEIGHTS = {
   stabilisateur: 0.25,
 };
 
-export const OVERLOAD_THRESHOLD = 2.0;
+export const OVERLOAD_THRESHOLD = 2.0; // valeur de secours uniquement
+
+// ── Seuils biomécaniques par sous-muscle ──────────────────────────────────────
+// Calibrés selon la taille et la capacité de récupération de chaque muscle.
+// { under: charge minimale pour stimuler, over: seuil de surcharge par séance }
+// Les muscles larges tolèrent plus de volume direct, les petits saturent vite.
+
+export const MUSCLE_THRESHOLDS = {
+  // Muscles larges (haute capacité de volume)
+  'Grand dorsal':              { under: 1.0,  over: 4.0 },
+  'Quadriceps':                { under: 1.0,  over: 4.5 },
+  'Fessiers':                  { under: 1.0,  over: 4.5 },
+  'Ischio-jambiers':           { under: 0.75, over: 3.5 },
+  'Pectoraux (milieu)':        { under: 0.75, over: 3.5 },
+  'Pectoraux (haut)':          { under: 0.5,  over: 3.0 },
+  'Pectoraux (bas)':           { under: 0.5,  over: 3.0 },
+  'Érecteurs':                 { under: 0.75, over: 3.5 },
+  'Rhomboïdes':                { under: 0.75, over: 3.5 },
+  // Muscles moyens
+  'Biceps (chef long)':        { under: 0.5,  over: 3.0 },
+  'Biceps (chef court)':       { under: 0.5,  over: 3.0 },
+  'Brachialis':                { under: 0.25, over: 2.0 },
+  'Brachioradialis':           { under: 0.25, over: 2.0 },
+  'Triceps (long chef)':       { under: 0.5,  over: 3.5 },
+  'Triceps (latéral)':         { under: 0.5,  over: 3.5 },
+  'Triceps (médial)':          { under: 0.25, over: 2.5 },
+  'Épaules (antérieures)':     { under: 0.5,  over: 3.0 },
+  'Épaules (latérales)':       { under: 0.5,  over: 3.0 },
+  'Épaules (postérieures)':    { under: 0.5,  over: 2.5 },
+  'Gastrocnémien':             { under: 0.5,  over: 3.0 },
+  'Soléaire':                  { under: 0.25, over: 2.5 },
+  // Muscles auxiliaires / petits
+  'Coiffe des rotateurs':      { under: 0.25, over: 2.0 },
+  'Dentelé antérieur':         { under: 0.25, over: 2.5 },
+  'Grand rond':                { under: 0.25, over: 2.5 },
+  'Trapèzes (supérieurs)':     { under: 0.5,  over: 3.0 },
+  'Trapèzes (moyens)':         { under: 0.25, over: 2.5 },
+  'Trapèzes (inférieurs)':     { under: 0.25, over: 2.0 },
+  'Moyen fessier':             { under: 0.25, over: 2.5 },
+  'Petit fessier':             { under: 0.25, over: 1.5 },
+  'Adducteurs':                { under: 0.25, over: 2.5 },
+  'Core (profond)':            { under: 0.5,  over: 3.5 },
+  'Core (obliques)':           { under: 0.5,  over: 3.0 },
+  // Avant-bras (petits, haute adaptabilité, saturent rapidement)
+  'Avant-bras (fléchisseurs)': { under: 0.5,  over: 2.5 },
+  'Avant-bras (extenseurs)':   { under: 0.5,  over: 2.0 },
+  'Pronateur teres':            { under: 0.25, over: 1.5 },
+};
+
+export function getMuscleThresholds(muscle) {
+  return MUSCLE_THRESHOLDS[muscle] ?? { under: 0.75, over: OVERLOAD_THRESHOLD };
+}
 
 // ── Accesseurs ────────────────────────────────────────────────────────────────
 
@@ -672,7 +730,7 @@ export function getConflictingExercises(exercises) {
       ...(d.secondary     ?? []),
       ...(d.stabilisateur ?? []),
     ];
-    if (all.some(m => (loads.get(m) ?? 0) >= OVERLOAD_THRESHOLD)) {
+    if (all.some(m => (loads.get(m) ?? 0) >= getMuscleThresholds(m).over)) {
       conflicting.add(ex);
     }
   });
@@ -692,7 +750,7 @@ export function getConflictMuscles(exercise, allExercises) {
     ...(d.primary       ?? []),
     ...(d.secondary     ?? []),
     ...(d.stabilisateur ?? []),
-  ].filter(m => (loads.get(m) ?? 0) >= OVERLOAD_THRESHOLD);
+  ].filter(m => (loads.get(m) ?? 0) >= getMuscleThresholds(m).over);
 }
 
 // ── analyzeDayMuscles ─────────────────────────────────────────────────────────
@@ -713,11 +771,13 @@ export function analyzeDayMuscles(exercises, targetGroupNames = []) {
     const isTargeted = targetGroupNames.includes(groupName);
 
     const subDetails = groupData.subMuscles.map(sm => {
-      const load = loads.get(sm) ?? 0;
+      const load   = loads.get(sm) ?? 0;
+      const thresh = getMuscleThresholds(sm);
       let status;
-      if (load === 0)                      status = isTargeted ? 'under' : 'none';
-      else if (load >= OVERLOAD_THRESHOLD) status = 'over';
-      else                                 status = isTargeted ? 'good'  : 'bonus';
+      if (load === 0)              status = isTargeted ? 'under' : 'none';
+      else if (load >= thresh.over) status = 'over';
+      else if (load < thresh.under) status = isTargeted ? 'under' : 'bonus';
+      else                          status = isTargeted ? 'good'  : 'bonus';
       return { name: sm, shortName: SHORT_LABELS[sm] ?? sm, load, status };
     });
 

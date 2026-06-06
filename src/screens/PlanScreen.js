@@ -29,7 +29,7 @@ import {
   getFavorites, toggleFavorite,
 } from '../storage/storage';
 import { PPL_PLAN, ARNOLD_PLAN, CUSTOM_PLAN } from '../data/defaultPlans';
-import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, analyzeDayMuscles, muscleCounts } from '../data/muscleGroups';
+import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, analyzeDayMuscles, muscleCounts, getMuscleThresholds } from '../data/muscleGroups';
 import WorkoutGeneratorModal from './WorkoutGeneratorModal';
 import { exportPlanToExcel } from '../lib/exportPlan';
 
@@ -47,12 +47,13 @@ const TEMPLATES = { ppl: PPL_PLAN, arnold: ARNOLD_PLAN, custom: CUSTOM_PLAN };
 
 function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
 
-// Status biomécanique d'un muscle selon sa charge pondérée
-function muscleStatus(load) {
-  if (load === 0)   return { label: 'Absent',        color: '#3A3A3A', dot: '#333' };
-  if (load < 1.0)   return { label: 'Sous-entraîné', color: colors.warning, dot: colors.warning };
-  if (load < 2.0)   return { label: 'Optimal',       color: colors.success, dot: colors.success };
-  return              { label: 'Surentraîné',          color: colors.danger,  dot: colors.danger  };
+// Status biomécanique d'un muscle selon sa charge pondérée et ses seuils spécifiques
+function muscleStatus(load, muscle) {
+  const { under, over } = getMuscleThresholds(muscle ?? '');
+  if (load === 0)       return { label: 'Absent',        color: '#3A3A3A',      dot: '#333' };
+  if (load >= over)     return { label: 'Surentraîné',   color: colors.danger,  dot: colors.danger };
+  if (load >= under)    return { label: 'Optimal',       color: colors.success, dot: colors.success };
+  return                       { label: 'Sous-entraîné', color: colors.warning, dot: colors.warning };
 }
 
 // ── MuscleAnalysisPanel supprimé — remplacé par MuscleDetailModal interactif
@@ -661,7 +662,7 @@ export default function PlanScreen() {
             // 1. Tous les muscles effectivement chargés
             loads.forEach((load, sm) => {
               if (!excludedMuscles.includes(sm)) {
-                result.push({ name: sm, load, st: muscleStatus(load) });
+                result.push({ name: sm, load, st: muscleStatus(load, sm) });
                 seen.add(sm);
               }
             });
@@ -670,7 +671,7 @@ export default function PlanScreen() {
               const gn = expandedGroup.slice(expandedGroup.indexOf('::') + 2);
               (HIGH_LEVEL_GROUPS[gn]?.subMuscles ?? []).forEach(sm => {
                 if (!seen.has(sm) && !excludedMuscles.includes(sm)) {
-                  result.push({ name: sm, load: 0, st: muscleStatus(0) });
+                  result.push({ name: sm, load: 0, st: muscleStatus(0, sm) });
                 }
               });
             }
@@ -935,9 +936,10 @@ export default function PlanScreen() {
           <ScrollView showsVerticalScrollIndicator={false} style={styles.detailScroll}>
             {/* ── Volume + statut ── */}
             {(() => {
-              const st   = muscleStatus(subMuscleLoad);
-              const pct  = Math.min(subMuscleLoad / 2.0, 1);
-              const fmt  = n => n % 1 === 0 ? String(n) : n.toFixed(1);
+              const thresh = getMuscleThresholds(subMuscleView ?? '');
+              const st     = muscleStatus(subMuscleLoad, subMuscleView);
+              const pct    = Math.min(subMuscleLoad / thresh.over, 1);
+              const fmt    = n => n % 1 === 0 ? String(n) : n.toFixed(1);
               return (
                 <View style={styles.volumeCard}>
                   <View style={styles.volumeRow}>
@@ -952,7 +954,7 @@ export default function PlanScreen() {
                   </View>
                   <View style={styles.gaugeLabels}>
                     <Text style={styles.gaugeHint}>Absent</Text>
-                    <Text style={styles.gaugeHint}>Optimal  1.0 – 2.0</Text>
+                    <Text style={styles.gaugeHint}>Optimal  {thresh.under.toFixed(2)} – {thresh.over.toFixed(1)}</Text>
                     <Text style={styles.gaugeHint}>Surcharge</Text>
                   </View>
                 </View>
@@ -975,7 +977,7 @@ export default function PlanScreen() {
                       </Text>
                     </View>
                     {/* Bouton retirer si surentraîné */}
-                    {subMuscleLoad >= 2.0 && (
+                    {subMuscleLoad >= getMuscleThresholds(subMuscleView ?? '').over && (
                       <TouchableOpacity
                         onPress={() => removeFromDay(item.name)}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -991,7 +993,7 @@ export default function PlanScreen() {
             )}
 
             {/* ── Recommandations contextuelles ── */}
-            {subMuscleLoad >= 2.0 ? (
+            {subMuscleLoad >= getMuscleThresholds(subMuscleView ?? '').over ? (
               /* Surentraîné → retirer / remplacer */
               dayExerciseContributions.filter(i => i.level === 'PRIMARY').length > 0 && (
                 <View style={styles.detailSection}>
