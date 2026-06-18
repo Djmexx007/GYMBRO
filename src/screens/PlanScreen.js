@@ -168,6 +168,7 @@ export default function PlanScreen() {
   const [search,      setSearch]      = useState('');
   const [editingDay,  setEditingDay]  = useState(null);
   const [editLabel,   setEditLabel]   = useState('');
+  const [swapModalDay, setSwapModalDay] = useState(null); // dayIdx source du swap, null = modale fermée
 
   const [clipboard,     setClipboard]     = useState(null);
   const [showGenerator, setShowGenerator] = useState(false);
@@ -239,6 +240,27 @@ export default function PlanScreen() {
     const next = deepCopy(plan);
     next.days[dayIdx].exercises = [...clipboard];
     setPlan(next);
+  }
+
+  function swapDays(dayIdxA, dayIdxB) {
+    if (dayIdxA === dayIdxB) return;
+    const next = deepCopy(plan);
+    const tmp = next.days[dayIdxA];
+    next.days[dayIdxA] = next.days[dayIdxB];
+    next.days[dayIdxB] = tmp;
+    setPlan(next);
+  }
+
+  function openSwapModal(dayIdx) {
+    if (editingDay !== null) setEditingDay(null);
+    setSwapModalDay(dayIdx);
+  }
+
+  function closeSwapModal() { setSwapModalDay(null); }
+
+  function confirmSwap(targetDayIdx) {
+    swapDays(swapModalDay, targetDayIdx);
+    setSwapModalDay(null);
   }
 
   function toggleTarget(dayIdx, groupName) {
@@ -725,7 +747,16 @@ export default function PlanScreen() {
                   </View>
                 </View>
                 {!isEditingThis && (
-                  <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+                  <View style={styles.dayHeaderRight}>
+                    <TouchableOpacity
+                      onPress={() => openSwapModal(dayIdx)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      style={styles.swapIconBtn}
+                    >
+                      <Ionicons name="swap-horizontal" size={18} color={colors.textMuted} />
+                    </TouchableOpacity>
+                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+                  </View>
                 )}
               </TouchableOpacity>
 
@@ -1052,6 +1083,48 @@ export default function PlanScreen() {
           </View>{/* detailSheet */}
         </View>{/* detailBg */}
       </Modal>
+
+      {/* ── Swap Day Modal ───────────────────────────────────────────────── */}
+      <Modal visible={swapModalDay !== null} transparent animationType="slide" onRequestClose={closeSwapModal}>
+        <View style={styles.swapBg}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeSwapModal} />
+          <View style={styles.swapSheet}>
+            <View style={styles.swapHandle} />
+            <View style={styles.swapHdr}>
+              <Text style={styles.swapTitle} numberOfLines={1}>
+                Échanger {DAYS_FULL[swapModalDay] ?? ''} avec…
+              </Text>
+              <TouchableOpacity onPress={closeSwapModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {[0, 1, 2, 3, 4, 5, 6]
+                .filter(idx => idx !== swapModalDay)
+                .map(idx => {
+                  const d = plan.days[idx];
+                  const c = d.exercises.length;
+                  return (
+                    <TouchableOpacity key={idx} style={styles.swapRow} onPress={() => confirmSwap(idx)} activeOpacity={0.7}>
+                      <View style={styles.swapRowBadge}>
+                        <Text style={styles.swapRowBadgeTxt}>{DAYS_SHORT[idx]}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.swapRowLabel}>{d.label || DAYS_FULL[idx]}</Text>
+                        <Text style={styles.swapRowSub}>{c > 0 ? `${c} exercice${c > 1 ? 's' : ''}` : 'Repos'}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+            <TouchableOpacity style={styles.swapCancelRow} onPress={closeSwapModal} activeOpacity={0.7}>
+              <Ionicons name="close-circle-outline" size={18} color={colors.textMuted} />
+              <Text style={styles.swapCancelTxt}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1175,4 +1248,22 @@ const styles = StyleSheet.create({
   noResults:  { fontSize: 13, color: colors.textMuted, fontStyle: 'italic', paddingVertical: 16, textAlign: 'center' },
   createRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 13 },
   createTxt:  { fontSize: 14, color: colors.primary, fontWeight: '600' },
+
+  // Day header right (swap icon + chevron)
+  dayHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  swapIconBtn:    { padding: 2 },
+
+  // Swap Day Modal
+  swapBg:      { flex: 1, justifyContent: 'flex-end' },
+  swapSheet:   { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '78%', paddingTop: 12, paddingBottom: 24 },
+  swapHandle:  { width: 32, height: 3, backgroundColor: '#2A2A2A', borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
+  swapHdr:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+  swapTitle:   { fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.5, flex: 1 },
+  swapRow:         { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  swapRowBadge:    { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.surfaceElevated, alignItems: 'center', justifyContent: 'center' },
+  swapRowBadgeTxt: { fontSize: 11, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.8 },
+  swapRowLabel:    { fontSize: 15, fontWeight: '600', color: colors.text },
+  swapRowSub:      { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  swapCancelRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, marginTop: 6 },
+  swapCancelTxt:   { fontSize: 14, color: colors.textMuted, fontWeight: '600' },
 });
