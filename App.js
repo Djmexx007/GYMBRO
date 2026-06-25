@@ -17,6 +17,7 @@ import ProgressScreen        from './src/screens/ProgressScreen';
 import DuoScreen             from './src/screens/DuoScreen';
 import PlanScreen            from './src/screens/PlanScreen';
 import MetricsScreen         from './src/screens/MetricsScreen';
+import CardioScreen          from './src/screens/CardioScreen';
 import PhotosScreen          from './src/screens/PhotosScreen';
 import IdentityScreen        from './src/screens/IdentityScreen';
 import WorkoutGeneratorModal from './src/screens/WorkoutGeneratorModal';
@@ -43,6 +44,19 @@ function TodayStack() {
       <Stack.Screen
         name="WorkoutSession"
         component={WorkoutSession}
+        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: false }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function MetricsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MetricsHome" component={MetricsScreen} />
+      <Stack.Screen
+        name="Cardio"
+        component={CardioScreen}
         options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: false }}
       />
     </Stack.Navigator>
@@ -95,7 +109,7 @@ function MainTabs() {
             },
           }}
         />
-        <Tab.Screen name="Metrics"  component={MetricsScreen} />
+        <Tab.Screen name="Metrics"  component={MetricsStack} />
         <Tab.Screen name="Photos"   component={PhotosScreen} />
       </Tab.Navigator>
 

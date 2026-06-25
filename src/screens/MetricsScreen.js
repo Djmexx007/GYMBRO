@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { lbToKg } from '../lib/units';
 
@@ -33,7 +34,7 @@ function getCategory(bmi) {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function MetricsScreen() {
+export default function MetricsScreen({ navigation }) {
   // Nutrition state
   const [nutr, setNutr]               = useState({ ...DEFAULT_NUTR });
   const [today, setToday]             = useState(() => new Date().toISOString().slice(0, 10));
@@ -142,6 +143,22 @@ export default function MetricsScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+
+          {/* Entrée Cardio */}
+          <TouchableOpacity
+            style={styles.cardioEntryCard}
+            onPress={() => navigation.navigate('Cardio')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.cardioEntryIcon}>
+              <Ionicons name="heart" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.cardioEntryTextWrap}>
+              <Text style={styles.cardioEntryTitle}>Cardio</Text>
+              <Text style={styles.cardioEntrySubtitle}>Suivi & analyses de tes séances cardio</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
 
           {/* ═══════════════════════════════════════════════════════
               SECTION 1 — NUTRITION
@@ -364,6 +381,30 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     marginBottom: 14,
   },
+
+  // ── Entrée Cardio ──────────────────────────────────────────────────────────
+  cardioEntryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 14,
+  },
+  cardioEntryIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,107,0,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardioEntryTextWrap: { flex: 1 },
+  cardioEntryTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: 2 },
+  cardioEntrySubtitle: { fontSize: 12, color: colors.textSecondary },
 
   // ── Nutrition ──────────────────────────────────────────────────────────────
   nutrCard: {

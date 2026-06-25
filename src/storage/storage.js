@@ -9,6 +9,8 @@ const LIBRARY_KEY     = '@gym_exercise_library';
 const PLAN_MODE_KEY   = '@gym_plan_mode';    // 'solo' | 'sync'
 const TODAY_SRC_KEY   = '@gym_today_source'; // 'mine' | 'shared'
 const FAVORITES_KEY   = '@gym_favorites';    // string[] — private, never synced
+const CARDIO_LOGS_KEY    = '@gym_cardio_logs';
+const CARDIO_PROFILE_KEY = '@gym_cardio_profile'; // { age, restingHr, maxHrOverride }
 
 // Each plan type gets its own key so switching types never wipes modifications
 function planTypeKey(type) { return `@gym_plan_type_${type}`; }
@@ -145,6 +147,108 @@ export async function deleteExerciseLogs(exerciseName) {
         .eq('user_name', userName)
         .eq('exercise', exerciseName);
     }
+  } catch {}
+}
+
+// ── Cardio ────────────────────────────────────────────────────────────────────
+
+export async function getCardioLogs() {
+  try {
+    const raw = await AsyncStorage.getItem(CARDIO_LOGS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveLocalCardioLogs(sessions) {
+  const existing = await getCardioLogs();
+  await AsyncStorage.setItem(CARDIO_LOGS_KEY, JSON.stringify([...existing, ...sessions]));
+}
+
+export async function getCloudCardioLogs(userName) {
+  try {
+    const { data, error } = await supabase
+      .from('cardio_logs')
+      .select('id, type, duration_sec, distance_km, avg_speed_kmh, max_speed_kmh, avg_pace_min_km, avg_incline_pct, max_incline_pct, calories, avg_hr, max_hr, notes, logged_at')
+      .eq('user_name', userName)
+      .order('logged_at', { ascending: false });
+
+    if (error || !data) return null;
+    return data.map(r => ({
+      id: r.id,
+      type: r.type,
+      date: r.logged_at,
+      durationSec: r.duration_sec,
+      distanceKm: r.distance_km,
+      avgSpeedKmh: r.avg_speed_kmh,
+      maxSpeedKmh: r.max_speed_kmh,
+      avgPaceMinKm: r.avg_pace_min_km,
+      avgInclinePct: r.avg_incline_pct,
+      maxInclinePct: r.max_incline_pct,
+      calories: r.calories,
+      avgHr: r.avg_hr,
+      maxHr: r.max_hr,
+      notes: r.notes,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCardioSession(session) {
+  try {
+    await saveLocalCardioLogs([session]);
+    const userName = await getUserName();
+    if (userName) {
+      supabase.from('cardio_logs').insert([{
+        id: session.id,
+        user_name: userName,
+        type: session.type,
+        duration_sec: session.durationSec,
+        distance_km: session.distanceKm,
+        avg_speed_kmh: session.avgSpeedKmh,
+        max_speed_kmh: session.maxSpeedKmh,
+        avg_pace_min_km: session.avgPaceMinKm,
+        avg_incline_pct: session.avgInclinePct,
+        max_incline_pct: session.maxInclinePct,
+        calories: session.calories,
+        avg_hr: session.avgHr,
+        max_hr: session.maxHr,
+        notes: session.notes,
+        logged_at: session.date,
+      }]).catch(() => {});
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteCardioSession(id) {
+  try {
+    const existing = await getCardioLogs();
+    await AsyncStorage.setItem(CARDIO_LOGS_KEY, JSON.stringify(existing.filter(s => s.id !== id)));
+
+    const userName = await getUserName();
+    if (userName) {
+      await supabase.from('cardio_logs').delete().eq('user_name', userName).eq('id', id);
+    }
+  } catch {}
+}
+
+export async function getCardioProfile() {
+  try {
+    const raw = await AsyncStorage.getItem(CARDIO_PROFILE_KEY);
+    return raw ? JSON.parse(raw) : { age: null, restingHr: null, maxHrOverride: null };
+  } catch {
+    return { age: null, restingHr: null, maxHrOverride: null };
+  }
+}
+
+export async function saveCardioProfile(profile) {
+  try {
+    await AsyncStorage.setItem(CARDIO_PROFILE_KEY, JSON.stringify(profile));
   } catch {}
 }
 
