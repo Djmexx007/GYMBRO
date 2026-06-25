@@ -9,22 +9,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { getPhotos, savePhoto, deletePhoto } from '../storage/photoStorage';
+import { colors } from '../theme';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const CARD_W = (SW - 48) / 2;
-
-const COLORS = {
-  bg:              '#080808',
-  surface:         '#111111',
-  surfaceElevated: '#1A1A1A',
-  border:          '#242424',
-  primary:         '#FF6B00',
-  text:            '#FFFFFF',
-  textSecondary:   '#999999',
-  textMuted:       '#484848',
-  success:         '#22C55E',
-  danger:          '#EF4444',
-};
 
 const PRESET_TAGS = ['Bulk', 'Cut', 'Maintenance', 'Lean Bulk', 'Force', 'Cardio'];
 
@@ -78,7 +66,7 @@ function BaPicker({ label, photo, onPress }) {
         </>
       ) : (
         <View style={styles.baEmpty}>
-          <Ionicons name="image-outline" size={36} color={COLORS.textMuted} />
+          <Ionicons name="image-outline" size={36} color={colors.textMuted} />
           <Text style={styles.baLabel}>{label}</Text>
         </View>
       )}
@@ -171,7 +159,9 @@ export default function PhotosScreen() {
   async function confirmAdd() {
     if (!pendingUri) return;
     const tags = customTag.trim() ? [...addTags, customTag.trim()] : addTags;
-    await savePhoto(pendingUri, { note: addNote.trim(), tags, weight: addWeight ? parseFloat(addWeight) : null });
+    const parsedWeight = addWeight ? parseFloat(addWeight) : NaN;
+    const weight = isNaN(parsedWeight) ? null : parsedWeight;
+    await savePhoto(pendingUri, { note: addNote.trim(), tags, weight });
     setAddOn(false); setPendingUri(null);
     load();
   }
@@ -208,7 +198,7 @@ export default function PhotosScreen() {
     if (filtered.length === 0) return (
       <View style={styles.empty}>
         <View style={styles.emptyIconWrap}>
-          <Ionicons name="camera-outline" size={52} color={COLORS.primary} />
+          <Ionicons name="camera-outline" size={52} color={colors.primary} />
         </View>
         <Text style={styles.emptyTitle}>
           {photos.length === 0 ? 'Aucune photo' : 'Aucun résultat'}
@@ -265,7 +255,7 @@ export default function PhotosScreen() {
     if (photos.length === 0) return (
       <View style={styles.empty}>
         <View style={styles.emptyIconWrap}>
-          <Ionicons name="time-outline" size={52} color={COLORS.primary} />
+          <Ionicons name="time-outline" size={52} color={colors.primary} />
         </View>
         <Text style={styles.emptyTitle}>Frise vide</Text>
         <Text style={styles.emptyTxt}>Ta frise chronologique apparaîtra ici\naprès ta première photo.</Text>
@@ -337,7 +327,7 @@ export default function PhotosScreen() {
                 {beforePh.weight ? <Text style={styles.diffW}>{beforePh.weight} lbs</Text> : null}
               </View>
               <View style={styles.diffMid}>
-                <Ionicons name="arrow-forward" size={22} color={COLORS.primary} />
+                <Ionicons name="arrow-forward" size={22} color={colors.primary} />
                 <Text style={styles.diffDays}>{diff} jours</Text>
               </View>
               <View style={styles.diffCol}>
@@ -348,7 +338,7 @@ export default function PhotosScreen() {
             </View>
             {wDiff !== null && (
               <View style={styles.wDiffSection}>
-                <Text style={[styles.wDiffVal, { color: wDiff >= 0 ? COLORS.success : COLORS.danger }]}>
+                <Text style={[styles.wDiffVal, { color: wDiff >= 0 ? colors.success : colors.danger }]}>
                   {wDiff >= 0 ? '+' : ''}{wDiff.toFixed(1)} lbs
                 </Text>
                 <Text style={styles.wDiffSub}>variation de poids</Text>
@@ -358,7 +348,7 @@ export default function PhotosScreen() {
         )}
         {(!beforePh || !afterPh) && (
           <View style={styles.cmpEmptyHint}>
-            <Ionicons name="git-compare-outline" size={40} color={COLORS.textMuted} style={{ marginBottom: 10 }} />
+            <Ionicons name="git-compare-outline" size={40} color={colors.textMuted} style={{ marginBottom: 10 }} />
             <Text style={styles.cmpEmptyTxt}>
               Touche l'un des cadres ci-dessus pour choisir une photo.
             </Text>
@@ -384,7 +374,7 @@ export default function PhotosScreen() {
             </TouchableOpacity>
             <Text style={styles.viewerCount}>{viewerIdx + 1} / {viewerPhotos.length}</Text>
             <TouchableOpacity style={styles.viewerBtn} onPress={() => confirmDelete(photo)}>
-              <Ionicons name="trash-outline" size={21} color={COLORS.danger} />
+              <Ionicons name="trash-outline" size={21} color={colors.danger} />
             </TouchableOpacity>
           </SafeAreaView>
 
@@ -419,7 +409,7 @@ export default function PhotosScreen() {
             <View style={styles.viewerChips}>
               {photo.weight ? (
                 <View style={styles.vChip}>
-                  <Ionicons name="barbell-outline" size={11} color={COLORS.primary} />
+                  <Ionicons name="barbell-outline" size={11} color={colors.primary} />
                   <Text style={styles.vChipTxt}>{photo.weight} lbs</Text>
                 </View>
               ) : null}
@@ -446,10 +436,10 @@ export default function PhotosScreen() {
           activeOpacity={0.82}
         >
           <View style={styles.srcBtnIcon}>
-            <Ionicons name="camera-outline" size={26} color={COLORS.primary} />
+            <Ionicons name="camera-outline" size={26} color={colors.primary} />
           </View>
           <Text style={styles.srcBtnTxt}>Prendre une photo</Text>
-          <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.srcBtn}
@@ -457,10 +447,10 @@ export default function PhotosScreen() {
           activeOpacity={0.82}
         >
           <View style={styles.srcBtnIcon}>
-            <Ionicons name="images-outline" size={26} color={COLORS.primary} />
+            <Ionicons name="images-outline" size={26} color={colors.primary} />
           </View>
           <Text style={styles.srcBtnTxt}>Choisir depuis la galerie</Text>
-          <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.cancelRow} onPress={() => setSourceOn(false)}>
           <Text style={styles.cancelTxt}>Annuler</Text>
@@ -538,7 +528,7 @@ export default function PhotosScreen() {
               onPress={() => setTab(t.key)}
               activeOpacity={0.75}
             >
-              <Ionicons name={t.icon} size={14} color={tab === t.key ? COLORS.primary : COLORS.textMuted} />
+              <Ionicons name={t.icon} size={14} color={tab === t.key ? colors.primary : colors.textMuted} />
               <Text style={[styles.tabTxt, tab === t.key && styles.tabTxtOn]}>{t.label}</Text>
             </TouchableOpacity>
           ))}
@@ -597,7 +587,7 @@ export default function PhotosScreen() {
                 value={addNote}
                 onChangeText={setAddNote}
                 placeholder="ex: Début du bulk, semaine 4…"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 multiline
               />
 
@@ -616,7 +606,7 @@ export default function PhotosScreen() {
                 value={customTag}
                 onChangeText={setCustomTag}
                 placeholder="Tag personnalisé…"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
               />
 
               <Text style={styles.addLbl}>POIDS (optionnel, lbs)</Text>
@@ -625,7 +615,7 @@ export default function PhotosScreen() {
                 value={addWeight}
                 onChangeText={setAddWeight}
                 placeholder="ex: 185"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
               />
 
@@ -647,23 +637,23 @@ export default function PhotosScreen() {
 // ── styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
+  container: { flex: 1, backgroundColor: colors.bg },
 
   // header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 22, paddingTop: 16, paddingBottom: 14,
-    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   title: {
-    fontSize: 38, fontWeight: '900', color: COLORS.text, letterSpacing: -1,
+    fontSize: 38, fontWeight: '900', color: colors.text, letterSpacing: -1,
   },
-  subtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 3 },
+  subtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 3 },
   addFab: {
     width: 50, height: 50, borderRadius: 16,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 10,
@@ -674,7 +664,7 @@ const styles = StyleSheet.create({
   tabBarWrap: { paddingHorizontal: 16, paddingVertical: 12 },
   tabBar: {
     flexDirection: 'row', gap: 0,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 6,
   },
@@ -685,28 +675,28 @@ const styles = StyleSheet.create({
   },
   tabBtnOn: {
     backgroundColor: 'rgba(255,107,0,0.12)',
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
-  tabTxt:   { fontSize: 10, fontWeight: '700', color: COLORS.textMuted },
-  tabTxtOn: { color: COLORS.primary },
+  tabTxt:   { fontSize: 10, fontWeight: '700', color: colors.textMuted },
+  tabTxtOn: { color: colors.primary },
 
   // filter
   filterScroll: { maxHeight: 44 },
   filterRow:    { paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingBottom: 8 },
   filterChip:   {
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
   },
-  filterChipOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterTxt:    { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
-  filterTxtOn:  { color: '#fff' },
+  filterChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterTxt:    { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  filterTxtOn:  { color: colors.text },
 
   // gallery
   gridContent: { padding: 16, paddingTop: 12, paddingBottom: 24 },
   photoCard: {
     width: CARD_W, borderRadius: 18, overflow: 'hidden',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
   },
   photoThumb: { width: CARD_W, height: CARD_W * 1.28 },
   photoOverlay: {
@@ -715,14 +705,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 8,
     gap: 2,
   },
-  photoDate:   { fontSize: 12, fontWeight: '700', color: '#fff' },
-  photoTagTxt: { fontSize: 10, fontWeight: '600', color: COLORS.primary },
+  photoDate:   { fontSize: 12, fontWeight: '700', color: colors.text },
+  photoTagTxt: { fontSize: 10, fontWeight: '600', color: colors.primary },
   wChip: {
     position: 'absolute', top: 8, right: 8,
     backgroundColor: 'rgba(0,0,0,0.70)',
     borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
   },
-  wChipTxt: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  wChipTxt: { fontSize: 10, fontWeight: '700', color: colors.text },
 
   // empty
   empty:         { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 32 },
@@ -732,66 +722,66 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 4,
   },
-  emptyTitle: { fontSize: 22, fontWeight: '800', color: COLORS.text },
-  emptyTxt:   { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 21 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: colors.text },
+  emptyTxt:   { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21 },
   emptyCta: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: COLORS.primary, borderRadius: 14,
+    backgroundColor: colors.primary, borderRadius: 14,
     paddingHorizontal: 22, paddingVertical: 13, marginTop: 6,
   },
-  emptyCtaTxt: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  emptyCtaTxt: { fontSize: 15, fontWeight: '800', color: colors.text },
 
   // timeline
   tlContent: { padding: 16 },
   monthRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14 },
-  monthLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
-  monthLbl:  { fontSize: 10, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 1.5 },
+  monthLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  monthLbl:  { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.5 },
   tlCard: {
-    backgroundColor: COLORS.surface, borderRadius: 18, overflow: 'hidden',
-    marginBottom: 12, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface, borderRadius: 18, overflow: 'hidden',
+    marginBottom: 12, borderWidth: 1, borderColor: colors.border,
   },
   tlImg:    { width: '100%', height: (SW - 32) * 0.62 },
   tlInfo:   { padding: 14, gap: 4 },
-  tlDate:   { fontSize: 14, fontWeight: '700', color: COLORS.text },
-  tlNote:   { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
-  tlWeight: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
+  tlDate:   { fontSize: 14, fontWeight: '700', color: colors.text },
+  tlNote:   { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+  tlWeight: { fontSize: 12, color: colors.primary, fontWeight: '600' },
   tlTagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   tlTag:    {
-    backgroundColor: COLORS.surfaceElevated, borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surfaceElevated, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: colors.border,
   },
-  tlTagTxt: { fontSize: 10, fontWeight: '600', color: COLORS.textMuted },
+  tlTagTxt: { fontSize: 10, fontWeight: '600', color: colors.textMuted },
 
   // compare
   cmpContent:   { padding: 16 },
-  cmpHint:      { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 14, lineHeight: 18 },
+  cmpHint:      { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginBottom: 14, lineHeight: 18 },
   cmpEmptyHint: { alignItems: 'center', marginTop: 24, paddingHorizontal: 24 },
-  cmpEmptyTxt:  { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20 },
+  cmpEmptyTxt:  { fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   baRow:        { flexDirection: 'row', gap: 4, height: SW * 0.78 },
-  baPicker:     { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 2, borderColor: COLORS.border, borderStyle: 'dashed' },
-  baPickerFilled: { borderStyle: 'solid', borderColor: COLORS.primary },
-  baEmpty:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.surface },
-  baLabel:      { fontSize: 12, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 1 },
+  baPicker:     { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed' },
+  baPickerFilled: { borderStyle: 'solid', borderColor: colors.primary },
+  baEmpty:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surface },
+  baLabel:      { fontSize: 12, fontWeight: '800', color: colors.textMuted, letterSpacing: 1 },
   baDateBadge:  {
     position: 'absolute', bottom: 8, left: 8,
     backgroundColor: 'rgba(0,0,0,0.78)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },
-  baDateTxt:    { fontSize: 11, fontWeight: '700', color: '#fff' },
-  baDivider:    { width: 3, backgroundColor: COLORS.primary, borderRadius: 2 },
+  baDateTxt:    { fontSize: 11, fontWeight: '700', color: colors.text },
+  baDivider:    { width: 3, backgroundColor: colors.primary, borderRadius: 2 },
   diffCard:     {
-    backgroundColor: COLORS.surface, borderRadius: 16, padding: 18,
-    marginTop: 12, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface, borderRadius: 16, padding: 18,
+    marginTop: 12, borderWidth: 1, borderColor: colors.border,
   },
   diffRow:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
   diffCol:      { flex: 1, gap: 4 },
-  diffLbl:      { fontSize: 9, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 1 },
-  diffDate:     { fontSize: 12, fontWeight: '600', color: COLORS.text },
-  diffW:        { fontSize: 12, color: COLORS.primary, fontWeight: '700' },
+  diffLbl:      { fontSize: 9, fontWeight: '800', color: colors.textMuted, letterSpacing: 1 },
+  diffDate:     { fontSize: 12, fontWeight: '600', color: colors.text },
+  diffW:        { fontSize: 12, color: colors.primary, fontWeight: '700' },
   diffMid:      { alignItems: 'center', gap: 4, paddingHorizontal: 4 },
-  diffDays:     { fontSize: 11, fontWeight: '800', color: COLORS.primary, textAlign: 'center' },
-  wDiffSection: { marginTop: 14, alignItems: 'center', paddingTop: 14, borderTopWidth: 1, borderTopColor: COLORS.border },
+  diffDays:     { fontSize: 11, fontWeight: '800', color: colors.primary, textAlign: 'center' },
+  wDiffSection: { marginTop: 14, alignItems: 'center', paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border },
   wDiffVal:     { fontSize: 28, fontWeight: '900' },
-  wDiffSub:     { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  wDiffSub:     { fontSize: 11, color: colors.textMuted, marginTop: 2 },
 
   // viewer
   viewerBg:     { flex: 1, backgroundColor: '#000' },
@@ -799,22 +789,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12,
   },
   viewerBtn:    { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  viewerCount:  { fontSize: 13, fontWeight: '700', color: '#fff' },
+  viewerCount:  { fontSize: 13, fontWeight: '700', color: colors.text },
   viewerImgWrap: { alignItems: 'center', justifyContent: 'center', minHeight: SH * 0.55 },
   viewerBottom: {
     paddingHorizontal: 20, paddingVertical: 14,
     backgroundColor: 'rgba(0,0,0,0.85)',
     borderTopWidth: 1, borderTopColor: '#2a2a2a',
   },
-  viewerDate:   { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  viewerDate:   { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
   viewerNote:   { fontSize: 13, color: '#bbb', lineHeight: 18, marginBottom: 8 },
   viewerChips:  { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   vChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: '#1a1a1a', borderRadius: 8,
+    backgroundColor: colors.surfaceElevated, borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: '#333',
   },
-  vChipTxt: { fontSize: 11, fontWeight: '600', color: COLORS.primary },
+  vChipTxt: { fontSize: 11, fontWeight: '600', color: colors.primary },
 
   // modal shared
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.60)' },
@@ -825,16 +815,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F0F0F',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 22, paddingBottom: 44,
-    borderTopWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 1, borderColor: colors.border,
   },
-  srcTitle:  { fontSize: 18, fontWeight: '800', color: COLORS.text, marginBottom: 16, paddingLeft: 2 },
+  srcTitle:  { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 16, paddingLeft: 2 },
   srcBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     height: 64,
     paddingHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
     marginBottom: 10,
   },
   srcBtnIcon: {
@@ -842,60 +832,60 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,107,0,0.12)',
     alignItems: 'center', justifyContent: 'center',
   },
-  srcBtnTxt: { fontSize: 16, fontWeight: '600', color: COLORS.text },
+  srcBtnTxt: { fontSize: 16, fontWeight: '600', color: colors.text },
   cancelRow: { padding: 16, alignItems: 'center' },
-  cancelTxt: { fontSize: 15, fontWeight: '600', color: COLORS.textMuted },
+  cancelTxt: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
 
   // add form
   addSheet: {
     backgroundColor: '#0F0F0F',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 22, paddingBottom: 44,
-    borderTopWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 1, borderColor: colors.border,
     maxHeight: '92%',
   },
-  addTitle:   { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 14 },
+  addTitle:   { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 14 },
   addPreview: { width: '100%', height: 200, borderRadius: 16, marginBottom: 16 },
   addLbl:     {
-    fontSize: 10, fontWeight: '800', color: COLORS.textMuted,
+    fontSize: 10, fontWeight: '800', color: colors.textMuted,
     letterSpacing: 1.5, marginBottom: 8, marginTop: 14,
   },
   addInput: {
-    backgroundColor: COLORS.surface, borderRadius: 12,
-    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 14, color: COLORS.text,
+    fontSize: 14, color: colors.text,
   },
   tagPicker:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagOption:      {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
   },
-  tagOptionOn:    { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  tagOptionTxt:   { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
-  tagOptionTxtOn: { color: '#fff' },
+  tagOptionOn:    { backgroundColor: colors.primary, borderColor: colors.primary },
+  tagOptionTxt:   { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  tagOptionTxtOn: { color: colors.text },
   saveBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: COLORS.primary, borderRadius: 16, height: 54, marginTop: 18,
-    shadowColor: COLORS.primary,
+    backgroundColor: colors.primary, borderRadius: 16, height: 54, marginTop: 18,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 6,
   },
-  saveBtnTxt: { fontSize: 15, fontWeight: '900', color: '#fff', letterSpacing: 1 },
+  saveBtnTxt: { fontSize: 15, fontWeight: '900', color: colors.text, letterSpacing: 1 },
 
   // before/after picker modal
   pickerSheet: {
     backgroundColor: '#0F0F0F',
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 22, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: COLORS.border,
+    borderTopWidth: 1, borderColor: colors.border,
     maxHeight: '70%',
   },
-  pickerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text, marginBottom: 14 },
-  pickerEmpty: { color: COLORS.textMuted, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 20 },
+  pickerTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 14 },
+  pickerEmpty: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingVertical: 20 },
   pickerCard:  { flex: 1 / 3 },
   pickerThumb: { width: '100%', aspectRatio: 0.8, borderRadius: 10 },
-  pickerDate:  { fontSize: 9, color: COLORS.textMuted, textAlign: 'center', marginTop: 3 },
+  pickerDate:  { fontSize: 9, color: colors.textMuted, textAlign: 'center', marginTop: 3 },
 });

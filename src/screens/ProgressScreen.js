@@ -14,6 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { getCloudLogs, getLogs, getUserName, deleteExerciseLogs } from '../storage/storage';
+import { toDisplayWeight } from '../data/muscleGroups';
+import { lbToKg, kgToLb } from '../lib/units';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,8 +31,8 @@ function getISOWeek(date) {
   return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
 }
 
-function lb2kg(lb) { return (parseFloat(lb) / 2.20462).toFixed(1); }
-function kg2lb(kg) { return (parseFloat(kg) * 2.20462).toFixed(1); }
+function lb2kg(lb) { return lbToKg(parseFloat(lb)).toFixed(1); }
+function kg2lb(kg) { return kgToLb(parseFloat(kg)).toFixed(1); }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
@@ -426,7 +428,10 @@ export default function ProgressScreen() {
       map[s.exercise].push(s);
     });
     const result = {};
-    Object.keys(map).forEach(ex => { result[ex] = computeExerciseStats(map[ex]); });
+    Object.keys(map).forEach(ex => {
+      const sets = map[ex].map(s => ({ ...s, weight: toDisplayWeight(ex, s.weight) }));
+      result[ex] = computeExerciseStats(sets);
+    });
     setStats(result);
   }
 

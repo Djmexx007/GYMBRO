@@ -9,13 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { getAllUsersLogs, getUserName, getLogs, getCloudLogs, saveSession, clearAllUsersLogs } from '../storage/storage';
 import { supabase } from '../lib/supabase';
+import { toDisplayWeight } from '../data/muscleGroups';
 import { WORKOUT_SPLIT } from '../data/workoutPlan';
+import { lbToKg } from '../lib/units';
 
-// ── Conversion lb → kg ────────────────────────────────────────────────────────
-
-const LB_TO_KG = 0.453592;
-function lbToKg(lb) { return lb * LB_TO_KG; }
-function fmtKg(kg)  { return kg >= 1000 ? `${(kg / 1000).toFixed(1)}k` : kg.toFixed(1); }
+function fmtKg(kg) { return kg >= 1000 ? `${(kg / 1000).toFixed(1)}k` : kg.toFixed(1); }
 
 // ── 1RM ───────────────────────────────────────────────────────────────────────
 
@@ -137,10 +135,9 @@ async function getUserInfo() {
     : '—';
   let cloudUsers = '?';
   try {
-    const { data } = await supabase.from('workout_logs').select('user_name').limit(500);
-    if (data) {
-      cloudUsers = [...new Set(data.map(r => r.user_name).filter(Boolean))].join(', ') || '(aucun)';
-    }
+    const { data, error } = await supabase.from('workout_logs').select('user_name').limit(500);
+    if (error) cloudUsers = `erreur: ${error.message}`;
+    else if (data) cloudUsers = [...new Set(data.map(r => r.user_name).filter(Boolean))].join(', ') || '(aucun)';
   } catch {}
   return (
     `👤 Utilisateur : ${name}\n` +
@@ -283,8 +280,8 @@ export default function DuoScreen() {
     else rivalWins++;
   });
 
-  const myTotalPR  = sharedExercises.reduce((sum, ex) => sum + lbToKg(myPRs[ex]?.weight ?? 0), 0);
-  const rvTotalPR  = sharedExercises.reduce((sum, ex) => sum + lbToKg(rivalPRs[ex]?.weight ?? 0), 0);
+  const myTotalPR  = sharedExercises.reduce((sum, ex) => sum + lbToKg(toDisplayWeight(ex, myPRs[ex]?.weight ?? 0)), 0);
+  const rvTotalPR  = sharedExercises.reduce((sum, ex) => sum + lbToKg(toDisplayWeight(ex, rivalPRs[ex]?.weight ?? 0)), 0);
   const totalGames = myWins + rivalWins;
   const myWinPct   = totalGames > 0 ? Math.round((myWins   / totalGames) * 100) : 0;
   const rvWinPct   = totalGames > 0 ? Math.round((rivalWins / totalGames) * 100) : 0;
@@ -324,8 +321,8 @@ export default function DuoScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#FF6B00"
-              colors={['#FF6B00']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         >
@@ -452,7 +449,7 @@ export default function DuoScreen() {
                   <View style={styles.scoreCol}>
                     <Text style={styles.scoreName}>{myName.toUpperCase()}</Text>
                     <Text style={[styles.scoreNum, myWins >= rivalWins && styles.scoreNumWin]}>{myWins}</Text>
-                    <Text style={[styles.scoreWinPct, myWins >= rivalWins && { color: '#FF6B00' }]}>{myWinPct}%</Text>
+                    <Text style={[styles.scoreWinPct, myWins >= rivalWins && { color: colors.primary }]}>{myWinPct}%</Text>
                     <Text style={styles.scoreTotalPR}>{fmtKg(myTotalPR)} kg</Text>
                   </View>
                   <View style={styles.scoreMiddle}>
@@ -463,7 +460,7 @@ export default function DuoScreen() {
                   <View style={styles.scoreCol}>
                     <Text style={styles.scoreName}>{rival.toUpperCase()}</Text>
                     <Text style={[styles.scoreNum, rivalWins > myWins && styles.scoreNumWin]}>{rivalWins}</Text>
-                    <Text style={[styles.scoreWinPct, rivalWins > myWins && { color: '#FF6B00' }]}>{rvWinPct}%</Text>
+                    <Text style={[styles.scoreWinPct, rivalWins > myWins && { color: colors.primary }]}>{rvWinPct}%</Text>
                     <Text style={styles.scoreTotalPR}>{fmtKg(rvTotalPR)} kg</Text>
                   </View>
                 </View>
@@ -481,8 +478,8 @@ export default function DuoScreen() {
                   {sharedExercises.map(ex => {
                     const mePR = myPRs[ex]  ?? myBests[ex];
                     const rvPR = rivalPRs[ex] ?? rivalBests[ex];
-                    const myW  = lbToKg(mePR?.weight ?? 0);
-                    const rvW  = lbToKg(rvPR?.weight ?? 0);
+                    const myW  = lbToKg(toDisplayWeight(ex, mePR?.weight ?? 0));
+                    const rvW  = lbToKg(toDisplayWeight(ex, rvPR?.weight ?? 0));
                     const iWin = myW >= rvW;
                     const gap  = Math.abs(myW - rvW);
                     return (
@@ -527,7 +524,7 @@ export default function DuoScreen() {
                     {myOnly.map(ex => (
                       <View key={ex} style={styles.pendingRow}>
                         <Text style={styles.pendingEx}>{ex}</Text>
-                        <Text style={styles.pendingVal}>Toi : {lbToKg(myBests[ex].weight).toFixed(1)} kg × {myBests[ex].reps}</Text>
+                        <Text style={styles.pendingVal}>Toi : {lbToKg(toDisplayWeight(ex, myBests[ex].weight)).toFixed(1)} kg × {myBests[ex].reps}</Text>
                       </View>
                     ))}
                   </View>
@@ -544,7 +541,7 @@ export default function DuoScreen() {
                     {rivalOnly.map(ex => (
                       <View key={ex} style={styles.pendingRow}>
                         <Text style={styles.pendingEx}>{ex}</Text>
-                        <Text style={styles.pendingVal}>{rival} : {lbToKg(rivalBests[ex].weight).toFixed(1)} kg × {rivalBests[ex].reps}</Text>
+                        <Text style={styles.pendingVal}>{rival} : {lbToKg(toDisplayWeight(ex, rivalBests[ex].weight)).toFixed(1)} kg × {rivalBests[ex].reps}</Text>
                       </View>
                     ))}
                   </View>
@@ -659,7 +656,7 @@ function DevBtn({ icon, label, sub, onPress, danger }) {
     >
       <Text style={styles.devBtnIcon}>{icon}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.devBtnLabel, danger && { color: '#EF4444' }]}>{label}</Text>
+        <Text style={[styles.devBtnLabel, danger && { color: colors.danger }]}>{label}</Text>
         <Text style={styles.devBtnSub}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={14} color="#333" />
@@ -668,86 +665,86 @@ function DevBtn({ icon, label, sub, onPress, danger }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#080808' },
-  header: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: '#242424' },
-  title: { fontSize: 38, fontWeight: '900', color: '#FFFFFF', letterSpacing: -1, marginBottom: 2 },
-  subtitle: { fontSize: 13, color: '#FF6B00', fontWeight: '600', letterSpacing: 0.3 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { fontSize: 38, fontWeight: '900', color: colors.text, letterSpacing: -1, marginBottom: 2 },
+  subtitle: { fontSize: 13, color: colors.primary, fontWeight: '600', letterSpacing: 0.3 },
 
   // Competition block
-  compCard: { backgroundColor: '#111111', borderRadius: 22, borderWidth: 1, borderColor: '#242424', marginBottom: 14, overflow: 'hidden' },
-  compHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  compTitle: { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.5 },
+  compCard: { backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.border, marginBottom: 14, overflow: 'hidden' },
+  compHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.surfaceElevated },
+  compTitle: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.5 },
   compRow: { flexDirection: 'row', padding: 16, gap: 12 },
   compCol: { flex: 1, alignItems: 'center', gap: 4 },
-  compVal: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
-  compValWin: { color: '#FF6B00' },
-  compName: { fontSize: 9, fontWeight: '800', color: '#484848', letterSpacing: 1 },
-  compUnit: { fontSize: 10, color: '#484848', fontWeight: '600' },
-  compDivider: { width: 1, backgroundColor: '#1a1a1a', alignSelf: 'stretch' },
+  compVal: { fontSize: 28, fontWeight: '900', color: colors.text },
+  compValWin: { color: colors.primary },
+  compName: { fontSize: 9, fontWeight: '800', color: colors.textMuted, letterSpacing: 1 },
+  compUnit: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
+  compDivider: { width: 1, backgroundColor: colors.surfaceElevated, alignSelf: 'stretch' },
   winnerBadge: { backgroundColor: 'rgba(255,107,0,0.12)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  winnerText: { fontSize: 9, fontWeight: '900', color: '#FF6B00', letterSpacing: 1 },
+  winnerText: { fontSize: 9, fontWeight: '900', color: colors.primary, letterSpacing: 1 },
 
   // Scoreboard
-  scoreboard: { flexDirection: 'row', backgroundColor: '#111111', borderRadius: 22, borderWidth: 1, borderColor: '#242424', marginBottom: 16, overflow: 'hidden' },
+  scoreboard: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.border, marginBottom: 16, overflow: 'hidden' },
   scoreCol: { flex: 1, alignItems: 'center', paddingVertical: 20 },
-  scoreMiddle: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#1a1a1a' },
-  scoreName: { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.2, marginBottom: 8 },
-  scoreNum: { fontSize: 52, fontWeight: '900', color: '#FFFFFF' },
-  scoreNumWin: { color: '#FF6B00' },
-  scoreVS: { color: '#484848', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
-  overallMsg: { color: '#FFFFFF', fontSize: 10, fontWeight: '700', textAlign: 'center', maxWidth: 72, lineHeight: 14 },
+  scoreMiddle: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.surfaceElevated },
+  scoreName: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 8 },
+  scoreNum: { fontSize: 52, fontWeight: '900', color: colors.text },
+  scoreNumWin: { color: colors.primary },
+  scoreVS: { color: colors.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
+  overallMsg: { color: colors.text, fontSize: 10, fontWeight: '700', textAlign: 'center', maxWidth: 72, lineHeight: 14 },
 
   // Exercise cards
-  sectionLabel: { color: '#484848', fontSize: 10, fontWeight: '800', letterSpacing: 1.8, marginBottom: 10, marginTop: 4 },
-  compareCard: { backgroundColor: '#111111', borderRadius: 20, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#242424' },
-  compareEx: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginBottom: 12 },
+  sectionLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1.8, marginBottom: 10, marginTop: 4 },
+  compareCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
+  compareEx: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 12 },
   compareRow: { flexDirection: 'row', gap: 10 },
-  compareBox: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#242424' },
-  compareBoxWin: { borderColor: '#FF6B00', backgroundColor: 'rgba(255,107,0,0.06)' },
-  compareName: { fontSize: 9, fontWeight: '800', color: '#484848', letterSpacing: 1, marginBottom: 6 },
-  compareMain: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', marginBottom: 2 },
-  compare1RM: { fontSize: 11, color: '#999999', marginBottom: 8 },
-  winChip: { alignSelf: 'flex-start', backgroundColor: '#FF6B00', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  compareBox: { flex: 1, backgroundColor: colors.surfaceElevated, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border },
+  compareBoxWin: { borderColor: colors.primary, backgroundColor: 'rgba(255,107,0,0.06)' },
+  compareName: { fontSize: 9, fontWeight: '800', color: colors.textMuted, letterSpacing: 1, marginBottom: 6 },
+  compareMain: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 2 },
+  compare1RM: { fontSize: 11, color: colors.textSecondary, marginBottom: 8 },
+  winChip: { alignSelf: 'flex-start', backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   winChipText: { color: '#000', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
 
   // Empty & pending
   empty: { alignItems: 'center', paddingTop: 80, gap: 14 },
-  emptyTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
-  emptyText: { fontSize: 14, color: '#999999', textAlign: 'center', lineHeight: 21, paddingHorizontal: 24 },
-  pendingSection: { marginTop: 6, backgroundColor: '#111111', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#242424', marginBottom: 10 },
-  pendingRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  pendingEx: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  pendingVal: { color: '#999999', fontSize: 12 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: colors.text },
+  emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 21, paddingHorizontal: 24 },
+  pendingSection: { marginTop: 6, backgroundColor: colors.surface, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
+  pendingRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.surfaceElevated },
+  pendingEx: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  pendingVal: { color: colors.textSecondary, fontSize: 12 },
 
   // Scroll
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  loadingText: { color: '#999999', fontSize: 14 },
+  loadingText: { color: colors.textSecondary, fontSize: 14 },
 
   // Dev panel
   devOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  devPanel:    { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, borderTopWidth: 1, borderColor: '#1a1a1a', maxHeight: '88%' },
+  devPanel:    { backgroundColor: '#0a0a0a', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, borderTopWidth: 1, borderColor: colors.surfaceElevated, maxHeight: '88%' },
   devHandle:   { width: 36, height: 4, backgroundColor: '#2a2a2a', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  devTitle:    { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 12, letterSpacing: 0.3 },
+  devTitle:    { fontSize: 17, fontWeight: '800', color: colors.text, marginBottom: 12, letterSpacing: 0.3 },
   devLog:      { fontSize: 13, color: '#4ade80', marginBottom: 10, fontWeight: '600', lineHeight: 19, backgroundColor: '#0d1a0d', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#1a3a1a' },
   devCat:      { fontSize: 9, fontWeight: '800', color: '#333', letterSpacing: 2, marginTop: 16, marginBottom: 6, textTransform: 'uppercase' },
   devBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, padding: 14, marginBottom: 6, gap: 12, borderWidth: 1, borderColor: '#1e1e1e' },
   devBtnDanger:{ borderColor: '#2a0000', backgroundColor: '#130000' },
   devBtnIcon:  { fontSize: 20, width: 28, textAlign: 'center' },
-  devBtnLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  devBtnLabel: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 2 },
   devBtnSub:   { color: '#444', fontSize: 11, lineHeight: 15 },
   devClose:    { marginTop: 14, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#1e1e1e', backgroundColor: '#111' },
   devCloseTxt: { color: '#333', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
 
   // Enhanced scoreboard
-  scoreWinPct:  { fontSize: 13, fontWeight: '700', color: '#484848', marginTop: 2 },
-  scoreTotalPR: { fontSize: 10, color: '#484848', marginTop: 4, fontWeight: '600' },
+  scoreWinPct:  { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginTop: 2 },
+  scoreTotalPR: { fontSize: 10, color: colors.textMuted, marginTop: 4, fontWeight: '600' },
 
   // PR comparison cards
   compareCardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  gapBadge:        { backgroundColor: '#1A1A1A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#242424' },
-  gapTxt:          { fontSize: 10, color: '#999999', fontWeight: '600' },
+  gapBadge:        { backgroundColor: colors.surfaceElevated, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: colors.border },
+  gapTxt:          { fontSize: 10, color: colors.textSecondary, fontWeight: '600' },
   trophyTxt:       { fontSize: 16, marginBottom: 4 },
-  compareReps:     { fontSize: 12, color: '#484848', marginBottom: 8 },
+  compareReps:     { fontSize: 12, color: colors.textMuted, marginBottom: 8 },
 });

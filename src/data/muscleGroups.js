@@ -13,6 +13,13 @@
 //   Quadriceps, Ischio-jambiers, Fessiers, Mollets
 //   Core (profond) / (obliques)
 
+// dumbbell: true → exercice fait avec deux haltères indépendants bougés simultanément
+// (même charge par bras). Quand on ajoute un nouvel exercice : si son nom ne précise
+// pas l'équipement (ex. "Lateral Raises", "Hammer Curl") mais qu'il se fait normalement
+// avec des haltères, il FAUT marquer dumbbell: true ici — isDumbbellExercise() ne peut
+// pas le deviner depuis le nom seul. Ne pas marquer les exercices unilatéraux (un seul
+// bras à la fois, ex. Dumbbell Row) ni ceux à charge unique partagée (barre, câble,
+// machine, ou un seul haltère tenu à deux mains, ex. Dumbbell Pullover).
 export const MUSCLE_GROUPS = {
 
   // ── PECTORAUX ──────────────────────────────────────────────────────────────
@@ -20,10 +27,10 @@ export const MUSCLE_GROUPS = {
   'Incline Bench Press':       { primary: ['Pectoraux (haut)'],     secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'] },
   'Incline Barbell Press':     { primary: ['Pectoraux (haut)'],     secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'] },
   'Decline Bench Press':       { primary: ['Pectoraux (bas)'],      secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'] },
-  'Flat Dumbbell Press':       { primary: ['Pectoraux (milieu)'],   secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'] },
-  'Incline Dumbbell Press':    { primary: ['Pectoraux (haut)'],     secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'] },
-  'Decline Dumbbell Press':    { primary: ['Pectoraux (bas)'],      secondary: ['Triceps (latéral)'],                           stabilisateur: ['Coiffe des rotateurs'] },
-  'Dumbbell Fly':              { primary: ['Pectoraux (milieu)'],   secondary: [] },
+  'Flat Dumbbell Press':       { primary: ['Pectoraux (milieu)'],   secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'], dumbbell: true },
+  'Incline Dumbbell Press':    { primary: ['Pectoraux (haut)'],     secondary: ['Triceps (latéral)', 'Épaules (antérieures)'],  stabilisateur: ['Coiffe des rotateurs'], dumbbell: true },
+  'Decline Dumbbell Press':    { primary: ['Pectoraux (bas)'],      secondary: ['Triceps (latéral)'],                           stabilisateur: ['Coiffe des rotateurs'], dumbbell: true },
+  'Dumbbell Fly':              { primary: ['Pectoraux (milieu)'],   secondary: [], dumbbell: true },
   'Cable Fly':                 { primary: ['Pectoraux (milieu)'],   secondary: [] },
   'Incline Cable Fly':         { primary: ['Pectoraux (haut)'],     secondary: [] },
   'Low Cable Fly':             { primary: ['Pectoraux (bas)'],      secondary: [] },
@@ -72,24 +79,24 @@ export const MUSCLE_GROUPS = {
   // ── ÉPAULES ────────────────────────────────────────────────────────────────
   'Shoulder Press':            { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)', 'Trapèzes (supérieurs)'],     stabilisateur: ['Coiffe des rotateurs'] },
   'Arnold Press':              { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)', 'Épaules (latérales)'] },
-  'Dumbbell Shoulder Press':   { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)'] },
+  'Dumbbell Shoulder Press':   { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)'], dumbbell: true },
   'Machine Shoulder Press':    { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)'] },
-  'Lateral Raises':            { primary: ['Épaules (latérales)'],            secondary: [] },
+  'Lateral Raises':            { primary: ['Épaules (latérales)'],            secondary: [], dumbbell: true },
   'Cable Lateral Raises':      { primary: ['Épaules (latérales)'],            secondary: [] },
-  'Front Raises':              { primary: ['Épaules (antérieures)'],          secondary: [] },
-  'Rear Delt Fly':             { primary: ['Épaules (postérieures)'],         secondary: ['Rhomboïdes'] },
+  'Front Raises':              { primary: ['Épaules (antérieures)'],          secondary: [], dumbbell: true },
+  'Rear Delt Fly':             { primary: ['Épaules (postérieures)'],         secondary: ['Rhomboïdes'], dumbbell: true },
   'Upright Row':               { primary: ['Épaules (latérales)'],            secondary: ['Trapèzes (supérieurs)'] },
   'Shrugs':                    { primary: ['Trapèzes (supérieurs)'],          secondary: [] },
-  'Dumbbell Shrugs':           { primary: ['Trapèzes (supérieurs)'],          secondary: [] },
+  'Dumbbell Shrugs':           { primary: ['Trapèzes (supérieurs)'],          secondary: [], dumbbell: true },
   'Handstand Push-ups':        { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)', 'Trapèzes (supérieurs)'] },
   'Pike Push-ups':             { primary: ['Épaules (antérieures)'],          secondary: ['Triceps (latéral)'] },
 
   // ── BICEPS ─────────────────────────────────────────────────────────────────
-  'Biceps Curl':               { primary: ['Biceps (chef long)', 'Biceps (chef court)'], secondary: [] },
-  'Hammer Curl':               { primary: ['Brachioradialis', 'Brachialis'],   secondary: ['Biceps (chef long)'] },
+  'Biceps Curl':               { primary: ['Biceps (chef long)', 'Biceps (chef court)'], secondary: [], dumbbell: true },
+  'Hammer Curl':               { primary: ['Brachioradialis', 'Brachialis'],   secondary: ['Biceps (chef long)'], dumbbell: true },
   'Preacher Curl':             { primary: ['Biceps (chef court)'],            secondary: [] },
   'Concentration Curl':        { primary: ['Biceps (chef court)'],            secondary: [] },
-  'Incline Dumbbell Curl':     { primary: ['Biceps (chef long)'],             secondary: [] },
+  'Incline Dumbbell Curl':     { primary: ['Biceps (chef long)'],             secondary: [], dumbbell: true },
   'Cable Curl':                { primary: ['Biceps (chef long)', 'Biceps (chef court)'], secondary: [] },
   'Reverse Curl':              { primary: ['Brachioradialis', 'Brachialis'],   secondary: ['Avant-bras (extenseurs)', 'Pronateur teres'] },
   'Zottman Curl':              { primary: ['Biceps (chef long)'],             secondary: ['Brachialis', 'Avant-bras (fléchisseurs)', 'Pronateur teres'] },
@@ -160,12 +167,12 @@ export const MUSCLE_GROUPS = {
   // ── GRIP / AVANT-BRAS ──────────────────────────────────────────────────────
   'Wrist Curls':               { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
   'Reverse Wrist Curls':       { primary: ['Avant-bras (extenseurs)'],        secondary: [] },
-  'Dumbbell Wrist Curl':       { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
-  'Reverse Dumbbell Wrist Curl':{ primary: ['Avant-bras (extenseurs)'],       secondary: [] },
+  'Dumbbell Wrist Curl':       { primary: ['Avant-bras (fléchisseurs)'],      secondary: [], dumbbell: true },
+  'Reverse Dumbbell Wrist Curl':{ primary: ['Avant-bras (extenseurs)'],       secondary: [], dumbbell: true },
   'Behind the Back Wrist Curl':{ primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
   'Wrist Extension':           { primary: ['Avant-bras (extenseurs)'],        secondary: [] },
-  'Hammer Grip Wrist Curl':    { primary: ['Brachialis', 'Brachioradialis'], secondary: ['Avant-bras (fléchisseurs)'] },
-  'Dumbbell Forearm Rotation': { primary: ['Pronateur teres'],                secondary: ['Brachioradialis', 'Avant-bras (fléchisseurs)', 'Avant-bras (extenseurs)'] },
+  'Hammer Grip Wrist Curl':    { primary: ['Brachialis', 'Brachioradialis'], secondary: ['Avant-bras (fléchisseurs)'], dumbbell: true },
+  'Dumbbell Forearm Rotation': { primary: ['Pronateur teres'],                secondary: ['Brachioradialis', 'Avant-bras (fléchisseurs)', 'Avant-bras (extenseurs)'], dumbbell: true },
   'Pronation Curls':           { primary: ['Pronateur teres'],                secondary: ['Avant-bras (fléchisseurs)'] },
   "Farmer's Walk":             { primary: ['Avant-bras (fléchisseurs)', 'Trapèzes (supérieurs)'], secondary: ['Avant-bras (extenseurs)', 'Core (profond)'] },
   'Plate Pinch':               { primary: ['Avant-bras (fléchisseurs)'],      secondary: [] },
@@ -200,7 +207,7 @@ export const MUSCLE_GROUPS = {
   'Smith Machine Incline Press':          { primary: ['Pectoraux (haut)'],                        secondary: ['Triceps (latéral)', 'Épaules (antérieures)', 'Dentelé antérieur'] },
   'Smith Machine Decline Press':          { primary: ['Pectoraux (bas)'],                         secondary: ['Triceps (latéral)', 'Épaules (antérieures)'] },
   'Floor Press':                          { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)', 'Épaules (antérieures)'] },
-  'Dumbbell Floor Press':                 { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)', 'Épaules (antérieures)'] },
+  'Dumbbell Floor Press':                 { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)', 'Épaules (antérieures)'], dumbbell: true },
   'Cable Crossover':                      { primary: ['Pectoraux (milieu)'],                      secondary: ['Épaules (antérieures)', 'Dentelé antérieur'] },
   'High to Low Cable Fly':                { primary: ['Pectoraux (bas)'],                         secondary: ['Épaules (antérieures)', 'Dentelé antérieur'] },
   'Low to High Cable Fly':                { primary: ['Pectoraux (haut)'],                        secondary: ['Épaules (antérieures)', 'Dentelé antérieur'] },
@@ -224,8 +231,8 @@ export const MUSCLE_GROUPS = {
   'TRX Push-ups':                         { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)', 'Dentelé antérieur', 'Core (profond)'] },
   'TRX Chest Fly':                        { primary: ['Pectoraux (milieu)'],                      secondary: ['Épaules (antérieures)', 'Dentelé antérieur', 'Core (profond)'] },
   'Hindu Push-ups':                       { primary: ['Pectoraux (milieu)'],                      secondary: ['Épaules (antérieures)', 'Dentelé antérieur', 'Érecteurs'] },
-  'Dumbbell Squeeze Press':               { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)'] },
-  'Low Incline Dumbbell Press':           { primary: ['Pectoraux (haut)'],                        secondary: ['Triceps (latéral)', 'Épaules (antérieures)', 'Dentelé antérieur'] },
+  'Dumbbell Squeeze Press':               { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)'], dumbbell: true },
+  'Low Incline Dumbbell Press':           { primary: ['Pectoraux (haut)'],                        secondary: ['Triceps (latéral)', 'Épaules (antérieures)', 'Dentelé antérieur'], dumbbell: true },
   'Push-up Plus':                         { primary: ['Dentelé antérieur'],                       secondary: ['Pectoraux (milieu)', 'Épaules (antérieures)'] },
   'Close Grip Incline Press':             { primary: ['Pectoraux (haut)', 'Triceps (latéral)'],   secondary: ['Épaules (antérieures)'] },
   'Plate Press':                          { primary: ['Pectoraux (milieu)'],                      secondary: ['Triceps (latéral)'] },
@@ -236,7 +243,7 @@ export const MUSCLE_GROUPS = {
   'High Cable Row':                       { primary: ['Rhomboïdes', 'Trapèzes (moyens)'],         secondary: ['Grand dorsal', 'Biceps (chef long)', 'Grand rond'] },
   'Wide Grip Cable Row':                  { primary: ['Grand dorsal', 'Rhomboïdes'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Trapèzes (moyens)'] },
   'Incline Dumbbell Row':                 { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Rhomboïdes'] },
-  'Prone Dumbbell Row':                   { primary: ['Rhomboïdes', 'Grand dorsal'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Trapèzes (moyens)'] },
+  'Prone Dumbbell Row':                   { primary: ['Rhomboïdes', 'Grand dorsal'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Trapèzes (moyens)'], dumbbell: true },
   'Seal Row':                             { primary: ['Rhomboïdes', 'Grand dorsal'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Trapèzes (moyens)'] },
   'Gorilla Row':                          { primary: ['Grand dorsal'],                            secondary: ['Biceps (chef long)', 'Grand rond', 'Rhomboïdes', 'Core (profond)'] },
   'Landmine Row':                         { primary: ['Grand dorsal', 'Rhomboïdes'],              secondary: ['Biceps (chef long)', 'Grand rond', 'Trapèzes (moyens)', 'Core (profond)'] },
@@ -277,14 +284,14 @@ export const MUSCLE_GROUPS = {
   'Landmine Shoulder Press':              { primary: ['Épaules (antérieures)'],                   secondary: ['Triceps (latéral)', 'Pectoraux (haut)', 'Dentelé antérieur'] },
   'Single Arm Dumbbell Press':            { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Triceps (latéral)', 'Core (obliques)'] },
   'Cable Shoulder Press':                 { primary: ['Épaules (antérieures)', 'Épaules (latérales)'],secondary: ['Triceps (latéral)'] },
-  'Seated Dumbbell Lateral Raise':        { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs'] },
+  'Seated Dumbbell Lateral Raise':        { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs'], dumbbell: true },
   'Leaning Cable Lateral Raise':          { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs'] },
   'Lying Cable Lateral Raise':            { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs'] },
-  'Incline Lateral Raise':                { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs', 'Trapèzes (inférieurs)'] },
+  'Incline Lateral Raise':                { primary: ['Épaules (latérales)'],                     secondary: ['Coiffe des rotateurs', 'Trapèzes (inférieurs)'], dumbbell: true },
   'Plate Front Raise':                    { primary: ['Épaules (antérieures)'],                   secondary: [] },
   'Barbell Front Raise':                  { primary: ['Épaules (antérieures)'],                   secondary: ['Trapèzes (supérieurs)'] },
   'Cable Front Raise':                    { primary: ['Épaules (antérieures)'],                   secondary: [] },
-  'Bent Over Lateral Raise':              { primary: ['Épaules (postérieures)'],                  secondary: ['Trapèzes (moyens)', 'Rhomboïdes', 'Coiffe des rotateurs'] },
+  'Bent Over Lateral Raise':              { primary: ['Épaules (postérieures)'],                  secondary: ['Trapèzes (moyens)', 'Rhomboïdes', 'Coiffe des rotateurs'], dumbbell: true },
   'Cable Rear Delt Fly':                  { primary: ['Épaules (postérieures)', 'Coiffe des rotateurs'],secondary: ['Rhomboïdes', 'Trapèzes (moyens)'] },
   'Reverse Pec Deck':                     { primary: ['Épaules (postérieures)'],                  secondary: ['Rhomboïdes', 'Trapèzes (moyens)', 'Coiffe des rotateurs'] },
   'Machine Rear Delt':                    { primary: ['Épaules (postérieures)'],                  secondary: ['Rhomboïdes', 'Coiffe des rotateurs'] },
@@ -304,7 +311,7 @@ export const MUSCLE_GROUPS = {
 
   // ── BICEPS – Variantes câbles, haltères, machines ──────────────────────────
   'Alternating Dumbbell Curl':            { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis', 'Brachioradialis'] },
-  'Seated Dumbbell Curl':                 { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis'] },
+  'Seated Dumbbell Curl':                 { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis'], dumbbell: true },
   'Drag Curl':                            { primary: ['Biceps (chef long)'],                      secondary: ['Brachialis'] },
   'High Cable Curl':                      { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis'] },
   'Low Cable Curl':                       { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis', 'Brachioradialis'] },
@@ -317,8 +324,8 @@ export const MUSCLE_GROUPS = {
   'TRX Curl':                             { primary: ['Biceps (chef long)', 'Biceps (chef court)'],secondary: ['Brachialis', 'Core (profond)'] },
   'Wide Grip Barbell Curl':               { primary: ['Biceps (chef court)'],                     secondary: ['Brachialis', 'Brachioradialis'] },
   'Narrow Grip Barbell Curl':             { primary: ['Biceps (chef long)'],                      secondary: ['Brachialis'] },
-  'Seated Hammer Curl':                   { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Biceps (chef long)'] },
-  'Incline Hammer Curl':                  { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Biceps (chef long)'] },
+  'Seated Hammer Curl':                   { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Biceps (chef long)'], dumbbell: true },
+  'Incline Hammer Curl':                  { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Biceps (chef long)'], dumbbell: true },
   'Cable Hammer Curl':                    { primary: ['Brachioradialis', 'Brachialis'],            secondary: ['Biceps (chef long)'] },
   'Single Arm Preacher Curl':             { primary: ['Biceps (chef court)'],                     secondary: ['Brachialis'] },
 
@@ -695,6 +702,16 @@ export function getMuscleThresholds(muscle) {
 export function getPrimary(exercise)       { return MUSCLE_GROUPS[exercise]?.primary        ?? []; }
 export function getSecondary(exercise)     { return MUSCLE_GROUPS[exercise]?.secondary      ?? []; }
 export function getStabilisateur(exercise) { return MUSCLE_GROUPS[exercise]?.stabilisateur  ?? []; }
+
+// Exercices à deux haltères indépendants bougés simultanément (charge égale par bras) :
+// le poids enregistré représente la charge totale, l'utilisateur entre le poids d'un seul haltère.
+export function isDumbbellExercise(exercise) {
+  if (MUSCLE_GROUPS[exercise]?.dumbbell) return true;
+  if (MUSCLE_GROUPS[exercise]) return false; // classé explicitement (ex: Dumbbell Row, unilatéral)
+  return /dumbbell/i.test(exercise) && !/single.?arm|one.?arm|alternat/i.test(exercise);
+}
+export function toDisplayWeight(exercise, weight) { return isDumbbellExercise(exercise) ? weight / 2 : weight; }
+export function toStoredWeight(exercise, weight)  { return isDumbbellExercise(exercise) ? weight * 2 : weight; }
 
 // ── muscleCounts ──────────────────────────────────────────────────────────────
 // Retourne un Map<muscle, charge> cumulant les contributions pondérées de

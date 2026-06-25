@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, Modal, StyleSheet, TouchableOpacity,
-  ScrollView, ActivityIndicator, Alert, TextInput,
+  ScrollView, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { colors } from '../theme';
 import { getExerciseLibrary } from '../storage/storage';
 import { DEFAULT_LIBRARY } from '../data/defaultPlans';
 import { exportPlanToExcel } from '../lib/exportPlan';
+import { buildSearchIndex, searchExercises } from '../lib/exerciseSearch';
 
 // ── Exercise pools by goal ─────────────────────────────────────────────────────
 
@@ -201,6 +202,7 @@ export default function WorkoutGeneratorModal({ visible, onClose }) {
   // Library & suggestions state (manual mode)
   const [library, setLibrary] = useState([...DEFAULT_LIBRARY]);
   const [suggestions, setSuggestions] = useState({}); // { dayIndex: string[] }
+  const searchIndex = useMemo(() => buildSearchIndex(library), [library]);
 
   const [exporting, setExporting] = useState(false);
 
@@ -263,8 +265,7 @@ export default function WorkoutGeneratorModal({ visible, onClose }) {
       setSuggestions(prev => ({ ...prev, [dayIdx]: [] }));
       return;
     }
-    const q = text.toLowerCase();
-    const matches = library.filter(ex => ex.toLowerCase().includes(q)).slice(0, 6);
+    const matches = (searchExercises(searchIndex, text) ?? []).slice(0, 6);
     setSuggestions(prev => ({ ...prev, [dayIdx]: matches }));
   }
 

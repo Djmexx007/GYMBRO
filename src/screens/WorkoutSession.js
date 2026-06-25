@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { saveSession } from '../storage/storage';
-import { getPrimary, getSecondary } from '../data/muscleGroups';
+import { getPrimary, getSecondary, isDumbbellExercise, toDisplayWeight, toStoredWeight } from '../data/muscleGroups';
 
 const DRAFT_KEY = '@gym_session_draft';
 
@@ -60,7 +60,7 @@ export default function WorkoutSession({ navigation, route }) {
     }
     const newSet = {
       exercise: currentExercise,
-      weight: w,
+      weight: toStoredWeight(currentExercise, w),
       reps: r,
       date: new Date().toISOString(),
     };
@@ -143,7 +143,7 @@ export default function WorkoutSession({ navigation, route }) {
               <View key={ex} style={styles.summaryExRow}>
                 <Text style={styles.summaryExName}>{ex}</Text>
                 <Text style={styles.summaryExDetail}>
-                  {sets.length} sets · best {best.weight} × {best.reps}
+                  {sets.length} sets · best {toDisplayWeight(ex, best.weight)} × {best.reps}
                 </Text>
               </View>
             );
@@ -225,7 +225,7 @@ export default function WorkoutSession({ navigation, route }) {
                 >
                   <Text style={styles.setNum}>SET {i + 1}</Text>
                   <Text style={styles.setVal}>
-                    {s.weight} × {s.reps}
+                    {toDisplayWeight(s.exercise, s.weight)} × {s.reps}
                   </Text>
                   <Ionicons name="checkmark-circle" size={20} color={colors.success} />
                 </View>
@@ -236,7 +236,9 @@ export default function WorkoutSession({ navigation, route }) {
           {/* Inputs */}
           <View style={styles.inputCard}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>WEIGHT (lbs)</Text>
+              <Text style={styles.inputLabel}>
+                {isDumbbellExercise(currentExercise) ? 'WEIGHT PER DUMBBELL (lbs)' : 'WEIGHT (lbs)'}
+              </Text>
               <TextInput
                 style={styles.inputField}
                 value={weight}

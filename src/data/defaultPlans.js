@@ -26,7 +26,7 @@ export const DEFAULT_LIBRARY = [
   'Shoulder Press', 'Arnold Press', 'Dumbbell Shoulder Press',
   'Lateral Raises', 'Cable Lateral Raises', 'Front Raises',
   'Rear Delt Fly', 'Upright Row', 'Shrugs', 'Dumbbell Shrugs',
-  'Handstand Push-ups', 'Pike Push-ups', 'Shoulder Press Machine',
+  'Handstand Push-ups', 'Pike Push-ups', 'Machine Shoulder Press',
 
   // ── BICEPS ───────────────────────────────────────────────────────────────
   'Biceps Curl', 'Hammer Curl', 'Preacher Curl', 'Concentration Curl',
@@ -71,9 +71,9 @@ export const DEFAULT_LIBRARY = [
   'Power Clean', 'Hang Clean', 'Push Press', 'Clean and Jerk', 'Snatch',
 
   // ── MACHINE / ISOLATION ──────────────────────────────────────────────────
-  'Row Machine', 'Hip Thrust', 'Glute Bridge',
-  'Abductor Machine', 'Adductor Machine',
-  'Back Extension', 'Hyperextension', 'Leg Press Calf Raise',
+  'Hip Thrust', 'Glute Bridge',
+  'Hip Abduction Machine', 'Hip Adduction Machine',
+  'Back Extension', 'Hyperextension', 'Leg Press Calf Raises',
 ];
 
 export const PPL_PLAN = {

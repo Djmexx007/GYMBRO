@@ -29,9 +29,10 @@ import {
   getFavorites, toggleFavorite,
 } from '../storage/storage';
 import { PPL_PLAN, ARNOLD_PLAN, CUSTOM_PLAN } from '../data/defaultPlans';
-import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, analyzeDayMuscles, muscleCounts, getMuscleThresholds } from '../data/muscleGroups';
+import { HIGH_LEVEL_GROUPS, MUSCLE_GROUPS, muscleCounts, getMuscleThresholds } from '../data/muscleGroups';
+import { buildSearchIndex, searchExercises } from '../lib/exerciseSearch';
 import WorkoutGeneratorModal from './WorkoutGeneratorModal';
-import { exportPlanToExcel } from '../lib/exportPlan';
+import * as Clipboard from 'expo-clipboard';
 
 const DAYS_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 const DAYS_FULL  = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -56,106 +57,6 @@ function muscleStatus(load, muscle) {
   return                       { label: 'Sous-entraîné', color: colors.warning, dot: colors.warning };
 }
 
-// ── MuscleAnalysisPanel supprimé — remplacé par MuscleDetailModal interactif
-function _unused_MuscleAnalysisPanel({ analysis, onGroupPress, onSubMusclePress }) {
-  const targeted = Object.entries(analysis).filter(([, g]) => g.isTargeted);
-  const bonus    = Object.entries(analysis).filter(([, g]) => !g.isTargeted && g.hasAnyHit);
-
-  if (targeted.length === 0 && bonus.length === 0) return null;
-
-  return (
-    <View style={apStyles.panel}>
-      <Text style={apStyles.sep}>ANALYSE MUSCULAIRE</Text>
-
-      {targeted.map(([name, g]) => {
-        const visibleSubs = g.subDetails.filter(s => s.status !== 'none');
-        const icon   = GROUP_STATUS_ICON[g.groupStatus];
-        const iColor = GROUP_STATUS_COLOR[g.groupStatus];
-        return (
-          <View key={name} style={apStyles.group}>
-            <TouchableOpacity
-              style={apStyles.groupHdr}
-              onPress={() => onGroupPress?.(name)}
-              activeOpacity={0.7}
-            >
-              <Text style={apStyles.groupName}>{g.icon} {name}</Text>
-              <View style={apStyles.groupHdrRight}>
-                {icon && <Text style={[apStyles.groupStatus, { color: iColor }]}>{icon}</Text>}
-                <Ionicons name="chevron-forward" size={13} color="#484848" style={{ marginLeft: 4 }} />
-              </View>
-            </TouchableOpacity>
-            <View style={apStyles.subRow}>
-              {g.subDetails.map(s => {
-                if (s.status === 'none') return null;
-                const cs = STATUS_STYLE[s.status];
-                return (
-                  <TouchableOpacity
-                    key={s.name}
-                    style={[apStyles.subChip, { backgroundColor: cs.bg, borderColor: cs.border }]}
-                    onPress={() => onSubMusclePress?.(s.name)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[apStyles.subChipTxt, { color: cs.text }]}>
-                      {s.shortName}{s.load > 0 ? ` ×${s.load % 1 === 0 ? s.load : s.load.toFixed(1)}` : ''}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              {visibleSubs.length === 0 && g.subDetails.map(s => (
-                <TouchableOpacity
-                  key={s.name}
-                  style={[apStyles.subChip, { backgroundColor: STATUS_STYLE.under.bg, borderColor: STATUS_STYLE.under.border }]}
-                  onPress={() => onSubMusclePress?.(s.name)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[apStyles.subChipTxt, { color: STATUS_STYLE.under.text }]}>{s.shortName}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        );
-      })}
-
-      {bonus.length > 0 && (
-        <>
-          <Text style={[apStyles.sep, { marginTop: 6 }]}>AUSSI SOLLICITÉ</Text>
-          <View style={apStyles.bonusRow}>
-            {bonus.map(([name, g]) => {
-              const total = g.subDetails.reduce((acc, s) => acc + s.load, 0);
-              return (
-                <TouchableOpacity
-                  key={name}
-                  style={apStyles.bonusChip}
-                  onPress={() => onGroupPress?.(name)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={apStyles.bonusChipTxt}>{g.icon} {name} ×{total % 1 === 0 ? total : total.toFixed(1)}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </>
-      )}
-    </View>
-  );
-}
-
-const apStyles = StyleSheet.create({
-  panel:      { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#242424' },
-  sep:        { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.2, marginBottom: 10 },
-  group:      { marginBottom: 12 },
-  groupHdr:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  groupHdrRight:{ flexDirection: 'row', alignItems: 'center' },
-  groupName:  { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
-  groupStatus:{ fontSize: 13, fontWeight: '900' },
-  subRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  subChip:    { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
-  subChipTxt: { fontSize: 10, fontWeight: '700' },
-  bonusRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  bonusChip:  { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: '#2A2A2A', backgroundColor: '#1A1A1A' },
-  bonusChipTxt:{ fontSize: 10, fontWeight: '600', color: '#484848' },
-});
-
 export default function PlanScreen() {
   const [plan,        setPlan]        = useState(null);
   const [library,     setLibrary]     = useState([]);
@@ -165,12 +66,12 @@ export default function PlanScreen() {
   const [expandedDay, setExpandedDay] = useState(TODAY);
   const [addModal,    setAddModal]    = useState(false);
   const [addingToDay, setAddingToDay] = useState(null);
+  const [replacingExIdx, setReplacingExIdx] = useState(null);
   const [search,      setSearch]      = useState('');
   const [editingDay,  setEditingDay]  = useState(null);
   const [editLabel,   setEditLabel]   = useState('');
   const [swapModalDay, setSwapModalDay] = useState(null); // dayIdx source du swap, null = modale fermée
 
-  const [clipboard,     setClipboard]     = useState(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [muscleModal,   setMuscleModal]   = useState(null); // { groupName, dayIdx }
   const [subMuscleView, setSubMuscleView] = useState(null); // sous-muscle sélectionné
@@ -207,9 +108,7 @@ export default function PlanScreen() {
       .slice(0, 8);
   }, [subMuscleView, muscleModal, plan]);
 
-  // kept for backward compat
-  const muscleModalGroupData = null;
-  const exercisesForSubMuscle = [];
+  const searchIndex = useMemo(() => buildSearchIndex(library), [library]);
 
   const savedRef       = useRef(null);
   const userNameRef    = useRef('');
@@ -233,14 +132,6 @@ export default function PlanScreen() {
     }, 15000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [planMode]);
-
-  function copyDay(dayIdx) { setClipboard([...(plan.days[dayIdx]?.exercises ?? [])]); }
-  function pasteDay(dayIdx) {
-    if (!clipboard) return;
-    const next = deepCopy(plan);
-    next.days[dayIdx].exercises = [...clipboard];
-    setPlan(next);
-  }
 
   function swapDays(dayIdxA, dayIdxB) {
     if (dayIdxA === dayIdxB) return;
@@ -273,15 +164,23 @@ export default function PlanScreen() {
     setPlan(next);
   }
 
-  function handleExport() {
-    if (!plan) return;
-    exportPlanToExcel({
-      planName: plan.name,
-      planType: plan.type,
-      userName: userNameRef.current,
-      mode:     planMode,
-      days:     plan.days,
+  function buildPlanText(planObj) {
+    const lines = [`Plan : ${planObj.name}`, ''];
+    [0, 1, 2, 3, 4, 5, 6].forEach(dayIdx => {
+      const day = planObj.days[dayIdx];
+      const exs = day.exercises ?? [];
+      lines.push(exs.length > 0 && day.label ? `${DAYS_FULL[dayIdx]} — ${day.label}` : DAYS_FULL[dayIdx]);
+      if (exs.length === 0) lines.push('Repos');
+      else exs.forEach((ex, i) => lines.push(`${i + 1}. ${ex}`));
+      lines.push('');
     });
+    return lines.join('\n').trim();
+  }
+
+  async function handleExport() {
+    if (!plan) return;
+    await Clipboard.setStringAsync(buildPlanText(plan));
+    Alert.alert('Plan copié', 'Ton plan complet a été copié dans le presse-papier.');
   }
 
   useFocusEffect(useCallback(() => {
@@ -444,19 +343,46 @@ export default function PlanScreen() {
     setPlan(next);
   }
 
+  function moveExerciseUp(dayIdx, exIdx) {
+    if (exIdx === 0) return;
+    const next = deepCopy(plan);
+    const exs = next.days[dayIdx].exercises;
+    [exs[exIdx - 1], exs[exIdx]] = [exs[exIdx], exs[exIdx - 1]];
+    setPlan(next);
+  }
+
   function openAdd(dayIdx) {
     setAddingToDay(dayIdx);
+    setReplacingExIdx(null);
     setSearch('');
     setAddModal(true);
   }
 
+  function openReplace(dayIdx, exIdx) {
+    setAddingToDay(dayIdx);
+    setReplacingExIdx(exIdx);
+    setSearch('');
+    setAddModal(true);
+  }
+
+  function closeAddModal() {
+    setAddModal(false);
+    setReplacingExIdx(null);
+  }
+
   function addToDay(exercise) {
     const next = deepCopy(plan);
-    if (!next.days[addingToDay].exercises.includes(exercise)) {
-      next.days[addingToDay].exercises.push(exercise);
+    const exs = next.days[addingToDay].exercises;
+    if (replacingExIdx !== null) {
+      if (exs[replacingExIdx] !== exercise && !exs.includes(exercise)) {
+        exs[replacingExIdx] = exercise;
+        setPlan(next);
+      }
+    } else if (!exs.includes(exercise)) {
+      exs.push(exercise);
       setPlan(next);
     }
-    setAddModal(false);
+    closeAddModal();
   }
 
   async function createAndAdd(name) {
@@ -560,10 +486,8 @@ export default function PlanScreen() {
 
   const currentDayExercises = addingToDay !== null ? (plan?.days[addingToDay]?.exercises ?? []) : [];
 
-  const filtered = library.filter(ex =>
-    ex.toLowerCase().includes(search.toLowerCase()) &&
-    !currentDayExercises.includes(ex)
-  );
+  const matched = searchExercises(searchIndex, search) ?? library;
+  const filtered = matched.filter(ex => !currentDayExercises.includes(ex));
 
   const favMatches  = filtered.filter(ex => favorites.includes(ex));
   const restMatches = filtered.filter(ex => !favorites.includes(ex));
@@ -607,7 +531,7 @@ export default function PlanScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.copyBtn} onPress={handleExport} activeOpacity={0.8}>
-            <Ionicons name="download-outline" size={15} color={colors.textMuted} />
+            <Ionicons name="clipboard-outline" size={15} color={colors.textMuted} />
             <Text style={styles.copyBtnTxt}>Exporter</Text>
           </TouchableOpacity>
         </View>
@@ -823,6 +747,20 @@ export default function PlanScreen() {
                         {favorites.includes(ex) && (
                           <Ionicons name="star" size={13} color={colors.primary} />
                         )}
+                        {exIdx > 0 && (
+                          <TouchableOpacity
+                            onPress={() => moveExerciseUp(dayIdx, exIdx)}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          >
+                            <Ionicons name="arrow-up-circle-outline" size={18} color={colors.textMuted} />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          onPress={() => openReplace(dayIdx, exIdx)}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        >
+                          <Ionicons name="repeat-outline" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => removeExercise(dayIdx, exIdx)}
                           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -876,12 +814,12 @@ export default function PlanScreen() {
       </ScrollView>
 
       {/* Add Exercise Modal */}
-      <Modal visible={addModal} transparent animationType="slide" onRequestClose={() => setAddModal(false)}>
+      <Modal visible={addModal} transparent animationType="slide" onRequestClose={closeAddModal}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={() => setAddModal(false)} />
+          <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={closeAddModal} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Ajouter un exercice</Text>
+            <Text style={styles.modalTitle}>{replacingExIdx !== null ? 'Remplacer un exercice' : 'Ajouter un exercice'}</Text>
             <TextInput
               style={styles.searchInput}
               value={search}
@@ -1133,7 +1071,7 @@ const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: colors.bg },
   header:      { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 22, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 },
   headerActions: { alignItems: 'flex-end', gap: 6, marginTop: 8 },
-  title:       { fontSize: 34, fontWeight: '900', color: colors.text, marginBottom: 2, letterSpacing: -0.5 },
+  title:       { fontSize: 38, fontWeight: '900', color: colors.text, marginBottom: 2, letterSpacing: -0.5 },
   subtitle:    { fontSize: 13, color: colors.primary, fontWeight: '600' },
   copyBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginTop: 8 },
   copyBtnTxt:  { fontSize: 11, fontWeight: '600', color: colors.textMuted },
@@ -1184,7 +1122,7 @@ const styles = StyleSheet.create({
   addExTxt: { color: colors.primary, fontSize: 14, fontWeight: '600' },
 
   // Grille groupes musculaires
-  muscleSection:      { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1A1A1A' },
+  muscleSection:      { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.surfaceElevated },
   muscleSectionTitle: { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 12 },
   muscleGrid:         { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   gridItem:           { width: '48.5%', paddingVertical: 11, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: '#1C1C1C', backgroundColor: '#0D0D0D', alignItems: 'center' },
@@ -1192,21 +1130,21 @@ const styles = StyleSheet.create({
   gridItemTxt:        { fontSize: 13, fontWeight: '600', color: '#3A3A3A' },
   gridItemTxtOpen:    { color: colors.primary },
   subPillsWrap:       { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 12 },
-  subPill:            { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#242424' },
+  subPill:            { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: colors.border },
   subPillTxt:         { fontSize: 12, fontWeight: '500', color: colors.text },
   subPillTxtOff:      { textDecorationLine: 'line-through', opacity: 0.3 },
 
   // Analyse musculaire inline
-  analysisBlock:      { marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#1A1A1A' },
+  analysisBlock:      { marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.surfaceElevated },
   analysisTitle:      { fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 10 },
-  analysisRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#111' },
+  analysisRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: colors.surface },
   analysisEmoji:      { fontSize: 13, marginRight: 10, width: 20 },
   analysisName:       { flex: 1, fontSize: 14, fontWeight: '500', color: colors.text },
   analysisLoad:       { fontSize: 12, fontWeight: '700' },
 
   // Muscle Detail Modal
   detailBg:         { flex: 1, justifyContent: 'flex-end' },
-  detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '85%', paddingTop: 12 },
+  detailSheet:      { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, borderTopWidth: 1, borderColor: colors.surfaceElevated, maxHeight: '85%', paddingTop: 12 },
   detailScroll:     { maxHeight: 520, paddingBottom: 44 },
   detailHandle:     { width: 32, height: 3, backgroundColor: '#2A2A2A', borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
   detailHdr:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
@@ -1217,13 +1155,13 @@ const styles = StyleSheet.create({
   statusBadge:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
   statusDot:        { width: 6, height: 6, borderRadius: 3 },
   statusLabel:      { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
-  gaugeTrack:       { height: 3, backgroundColor: '#1A1A1A', borderRadius: 2, overflow: 'hidden', marginBottom: 6 },
+  gaugeTrack:       { height: 3, backgroundColor: colors.surfaceElevated, borderRadius: 2, overflow: 'hidden', marginBottom: 6 },
   gaugeFill:        { height: 3, borderRadius: 2 },
   gaugeLabels:      { flexDirection: 'row', justifyContent: 'space-between' },
   gaugeHint:        { fontSize: 10, color: '#2A2A2A', fontWeight: '500' },
   detailSection:    { marginBottom: 22 },
   detailSectionTitle:{ fontSize: 10, fontWeight: '700', color: '#3A3A3A', letterSpacing: 1.4, marginBottom: 10 },
-  detailExRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#111' },
+  detailExRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.surface },
   detailExName:     { flex: 1, fontSize: 14, fontWeight: '500', color: colors.text },
   detailContrib:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailLevel:      { fontSize: 11, fontWeight: '700', color: '#3A3A3A', letterSpacing: 0.5 },
@@ -1238,7 +1176,7 @@ const styles = StyleSheet.create({
 
   // Modal
   modalBg:    { flex: 1 },
-  modalSheet: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40, borderTopWidth: 1, borderColor: '#333', maxHeight: '78%' },
+  modalSheet: { backgroundColor: colors.surfaceElevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40, borderTopWidth: 1, borderColor: '#333', maxHeight: '78%' },
   modalHandle:{ width: 36, height: 4, backgroundColor: '#444', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 14 },
   searchInput:{ backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colors.text, marginBottom: 10 },
@@ -1255,7 +1193,7 @@ const styles = StyleSheet.create({
 
   // Swap Day Modal
   swapBg:      { flex: 1, justifyContent: 'flex-end' },
-  swapSheet:   { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, borderTopWidth: 1, borderColor: '#1A1A1A', maxHeight: '78%', paddingTop: 12, paddingBottom: 24 },
+  swapSheet:   { backgroundColor: '#0D0D0D', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 22, borderTopWidth: 1, borderColor: colors.surfaceElevated, maxHeight: '78%', paddingTop: 12, paddingBottom: 24 },
   swapHandle:  { width: 32, height: 3, backgroundColor: '#2A2A2A', borderRadius: 2, alignSelf: 'center', marginBottom: 18 },
   swapHdr:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   swapTitle:   { fontSize: 20, fontWeight: '800', color: colors.text, letterSpacing: -0.5, flex: 1 },

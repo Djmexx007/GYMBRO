@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors } from '../theme';
+import { lbToKg } from '../lib/units';
 
 // ─── Nutrition defaults ───────────────────────────────────────────────────────
 const DEFAULT_NUTR = { calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 };
@@ -26,9 +27,9 @@ function calcBMI(weightKg, heightM) {
 
 function getCategory(bmi) {
   if (bmi < 18.5) return { label: 'Insuffisance pondérale', color: '#60A5FA', icon: '📉' };
-  if (bmi < 25)   return { label: 'Normal',                  color: '#22C55E', icon: '✅' };
-  if (bmi < 30)   return { label: 'Surpoids',                color: '#F59E0B', icon: '⚠️' };
-  return               { label: 'Obésité',                   color: '#EF4444', icon: '🔴' };
+  if (bmi < 25)   return { label: 'Normal',                  color: colors.success, icon: '✅' };
+  if (bmi < 30)   return { label: 'Surpoids',                color: colors.warning, icon: '⚠️' };
+  return               { label: 'Obésité',                   color: colors.danger, icon: '🔴' };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ export default function MetricsScreen() {
     const w = parseFloat(weight);
     const h = parseFloat(height);
     if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) { setBmi(null); return; }
-    const weightKg = weightUnit === 'lbs' ? w * 0.453592 : w;
+    const weightKg = weightUnit === 'lbs' ? lbToKg(w) : w;
     const heightM  = heightUnit === 'cm'  ? h / 100       : h;
     setBmi(calcBMI(weightKg, heightM));
   }
@@ -116,7 +117,7 @@ export default function MetricsScreen() {
   // ── Calorie bar ───────────────────────────────────────────────────────────
   const calorieRatio   = Math.min(nutr.calories / calorieGoal, 1);
   const calorieOver    = nutr.calories > calorieGoal;
-  const calorieBarColor = calorieOver ? '#EF4444' : '#FF6B00';
+  const calorieBarColor = calorieOver ? colors.danger : colors.primary;
 
   // ── Macro grid items ──────────────────────────────────────────────────────
   const macros = [
@@ -242,7 +243,7 @@ export default function MetricsScreen() {
                 onChangeText={v => { setWeight(v); persistMetrics(v, height, weightUnit, heightUnit); }}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                placeholderTextColor="#484848"
+                placeholderTextColor={colors.textMuted}
                 returnKeyType="next"
                 selectTextOnFocus
               />
@@ -270,7 +271,7 @@ export default function MetricsScreen() {
                 onChangeText={v => { setHeight(v); persistMetrics(weight, v, weightUnit, heightUnit); }}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                placeholderTextColor="#484848"
+                placeholderTextColor={colors.textMuted}
                 returnKeyType="done"
                 onSubmitEditing={calculate}
                 selectTextOnFocus
@@ -309,9 +310,9 @@ export default function MetricsScreen() {
               <View style={styles.scaleRow}>
                 {[
                   { label: '< 18.5',    name: 'Insuff.',  color: '#60A5FA' },
-                  { label: '18.5–24.9', name: 'Normal',   color: '#22C55E' },
-                  { label: '25–29.9',   name: 'Surpoids', color: '#F59E0B' },
-                  { label: '≥ 30',      name: 'Obésité',  color: '#EF4444' },
+                  { label: '18.5–24.9', name: 'Normal',   color: colors.success },
+                  { label: '25–29.9',   name: 'Surpoids', color: colors.warning },
+                  { label: '≥ 30',      name: 'Obésité',  color: colors.danger },
                 ].map(cat => (
                   <View key={cat.name} style={styles.scaleCell}>
                     <View style={[styles.scaleDot, { backgroundColor: cat.color }]} />
@@ -336,42 +337,42 @@ export default function MetricsScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#080808' },
+  container: { flex: 1, backgroundColor: colors.bg },
 
   header: {
     paddingHorizontal: 22,
     paddingTop: 20,
     paddingBottom: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#242424',
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 38,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: colors.text,
     letterSpacing: -1,
     marginBottom: 2,
   },
-  subtitle: { fontSize: 13, color: '#FF6B00', fontWeight: '600' },
+  subtitle: { fontSize: 13, color: colors.primary, fontWeight: '600' },
 
   scrollContent: { padding: 22 },
 
   sectionTitle: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#484848',
+    color: colors.textMuted,
     letterSpacing: 1.8,
     marginBottom: 14,
   },
 
   // ── Nutrition ──────────────────────────────────────────────────────────────
   nutrCard: {
-    backgroundColor: '#111111',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     padding: 18,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#242424',
+    borderColor: colors.border,
   },
 
   calorieRow: {
@@ -380,13 +381,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  calorieLabel: { fontSize: 12, fontWeight: '700', color: '#FF6B00' },
+  calorieLabel: { fontSize: 12, fontWeight: '700', color: colors.primary },
 
   nutrGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
 
   nutrItem: {
     width: '47%',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 16,
     padding: 14,
     alignItems: 'center',
@@ -396,23 +397,23 @@ const styles = StyleSheet.create({
   nutrLabel: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#484848',
+    color: colors.textMuted,
     letterSpacing: 1,
     marginBottom: 10,
   },
-  nutrVal:  { fontSize: 32, fontWeight: '900', color: '#FFFFFF', marginBottom: 6 },
+  nutrVal:  { fontSize: 32, fontWeight: '900', color: colors.text, marginBottom: 6 },
   nutrValInput: {
-    fontSize: 32, fontWeight: '900', color: '#FFFFFF', marginBottom: 6,
+    fontSize: 32, fontWeight: '900', color: colors.text, marginBottom: 6,
     textAlign: 'center', minWidth: 80, padding: 0,
   },
-  nutrUnit: { fontSize: 10, color: '#484848', marginBottom: 10 },
+  nutrUnit: { fontSize: 10, color: colors.textMuted, marginBottom: 10 },
 
   nutrBtns: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   nutrBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#FF6B00',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -420,7 +421,7 @@ const styles = StyleSheet.create({
 
   calorieBarBg: {
     height: 6,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 3,
     marginTop: 12,
     overflow: 'hidden',
@@ -428,45 +429,45 @@ const styles = StyleSheet.create({
   calorieBarFill: { height: 6, borderRadius: 3 },
 
   nutrResetBtn: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 20 },
-  nutrResetText: { fontSize: 10, fontWeight: '800', color: '#484848', letterSpacing: 1.2 },
+  nutrResetText: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2 },
 
   // ── IMC inputs ─────────────────────────────────────────────────────────────
   inputBlock: { marginBottom: 20 },
   inputLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#484848',
+    color: colors.textMuted,
     letterSpacing: 1.5,
     marginBottom: 10,
   },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   inputField: {
     flex: 1,
-    backgroundColor: '#111111',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#242424',
+    borderColor: colors.border,
     paddingHorizontal: 20,
     paddingVertical: 18,
     fontSize: 36,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     textAlign: 'center',
   },
   unitToggle: {
-    backgroundColor: '#111111',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#242424',
+    borderColor: colors.border,
     overflow: 'hidden',
   },
   unitBtn:       { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' },
-  unitBtnActive: { backgroundColor: '#FF6B00' },
-  unitText:      { fontSize: 13, fontWeight: '800', color: '#484848' },
+  unitBtnActive: { backgroundColor: colors.primary },
+  unitText:      { fontSize: 13, fontWeight: '800', color: colors.textMuted },
   unitTextActive: { color: '#000' },
 
   calcBtn: {
-    backgroundColor: '#FF6B00',
+    backgroundColor: colors.primary,
     borderRadius: 18,
     height: 68,
     alignItems: 'center',
@@ -477,7 +478,7 @@ const styles = StyleSheet.create({
 
   // ── IMC result ─────────────────────────────────────────────────────────────
   imcCard: {
-    backgroundColor: '#111111',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     borderWidth: 2,
     padding: 24,
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
   },
   resultEmoji:    { fontSize: 48, marginBottom: 8 },
   resultBmi:      { fontSize: 72, fontWeight: '900', lineHeight: 80 },
-  resultLabel:    { fontSize: 14, color: '#484848', fontWeight: '700', letterSpacing: 2, marginBottom: 6 },
+  resultLabel:    { fontSize: 14, color: colors.textMuted, fontWeight: '700', letterSpacing: 2, marginBottom: 6 },
   resultCategory: { fontSize: 22, fontWeight: '800', marginBottom: 28 },
 
   scaleRow: {
@@ -498,8 +499,8 @@ const styles = StyleSheet.create({
   scaleCell:  { alignItems: 'center', minWidth: 70 },
   scaleDot:   { width: 10, height: 10, borderRadius: 5, marginBottom: 4 },
   scaleName:  { fontSize: 10, fontWeight: '700', color: '#888888', marginBottom: 2 },
-  scaleRange: { fontSize: 9, color: '#484848', textAlign: 'center' },
+  scaleRange: { fontSize: 9, color: colors.textMuted, textAlign: 'center' },
 
   resetBtn:  { paddingVertical: 10, paddingHorizontal: 24 },
-  resetText: { fontSize: 12, fontWeight: '800', color: '#484848', letterSpacing: 1 },
+  resetText: { fontSize: 12, fontWeight: '800', color: colors.textMuted, letterSpacing: 1 },
 });

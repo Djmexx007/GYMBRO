@@ -271,18 +271,3 @@ export async function toggleFavorite(exerciseName) {
   await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
   return next;
 }
-
-// ── Dev utilities ─────────────────────────────────────────────────────────────
-
-export async function insertRawCloud(sets, overrideUserName) {
-  const userName = overrideUserName ?? (await getUserName());
-  if (!userName) return;
-  const rows = sets.map(s => ({
-    user_name: userName,
-    exercise: s.exercise,
-    weight: s.weight,
-    reps: s.reps,
-    logged_at: s.date ?? new Date().toISOString(),
-  }));
-  await supabase.from('workout_logs').insert(rows);
-}
