@@ -1,16 +1,20 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Modal, Alert, Vibration, DevSettings, RefreshControl,
+  TouchableOpacity, Modal, Alert, Vibration, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
-import { getAllUsersLogs, getUserName, getLogs, getCloudLogs, saveSession, clearAllUsersLogs } from '../storage/storage';
+import {
+  getAllUsersLogs, getUserName, clearAllUsersLogs,
+  getAllActivity, getSharedPlan, getCloudCardioLogs,
+} from '../storage/storage';
 import { supabase } from '../lib/supabase';
 import { toDisplayWeight } from '../data/muscleGroups';
-import { WORKOUT_SPLIT } from '../data/workoutPlan';
+import { getCardioTypeLabel } from '../data/cardioTypes';
+import { formatDuration } from '../lib/cardioUnits';
 import { lbToKg } from '../lib/units';
 
 function fmtKg(kg) { return kg >= 1000 ? `${(kg / 1000).toFixed(1)}k` : kg.toFixed(1); }
@@ -71,81 +75,42 @@ function daysSinceLastSession(logs) {
   return Math.floor((Date.now() - latest) / 86400000);
 }
 
-// ── Dev helpers ───────────────────────────────────────────────────────────────
+// Seul ce nom d'utilisateur voit le bouton RADAR et peut ouvrir le panneau
+// espion/outils (comparaison insensible à la casse avec le nom local).
+const RADAR_OWNER = 'Derek';
 
-function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+// ── Radar helpers ─────────────────────────────────────────────────────────────
 
-async function seedFakeHistory() {
-  const sets = [];
-  const now = Date.now();
-  for (let weekAgo = 0; weekAgo < 3; weekAgo++) {
-    for (let day = 0; day <= 6; day++) {
-      const workout = WORKOUT_SPLIT[day];
-      const daysBack = weekAgo * 7 + (6 - day);
-      const date = new Date(now - daysBack * 86400000).toISOString();
-      workout.exercises.forEach(exercise => {
-        const base = rand(65, 185);
-        for (let s = 0; s < rand(3, 5); s++) {
-          sets.push({ exercise, weight: base + rand(-10, 10), reps: rand(5, 12), date });
-        }
-      });
-    }
-  }
-  await saveSession(sets);
-  return `✅ ${sets.length} sets générés sur 3 semaines (7j × 3 sem.).`;
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function isToday(iso) { return !!iso && iso.slice(0, 10) === todayKey(); }
+
+function timeAgo(iso) {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'à l\'instant';
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  return `il y a ${Math.floor(h / 24)} j`;
 }
 
-async function seedProgressionData() {
-  const now = Date.now();
-  const exercises = [
-    { name: 'Bench Press',    base: 135, reps: 5 },
-    { name: 'Squat',          base: 185, reps: 5 },
-    { name: 'Deadlift',       base: 225, reps: 3 },
-    { name: 'Shoulder Press', base: 95,  reps: 8 },
-    { name: 'Barbell Row',    base: 135, reps: 8 },
-    { name: 'Pull-ups',       base: 0,   reps: 10 },
-  ];
-  const sets = [];
-  for (let w = 0; w < 10; w++) {
-    const mult = 0.72 + (w / 10) * 0.28;
-    const date = new Date(now - (10 - w) * 7 * 86400000).toISOString();
-    exercises.forEach(({ name, base, reps }) => {
-      const weight = base > 0 ? Math.round((base * mult) / 2.5) * 2.5 : 0;
-      for (let s = 0; s < 4; s++) sets.push({ exercise: name, weight, reps, date });
-    });
-  }
-  await saveSession(sets);
-  return `📈 ${sets.length} sets sur 10 semaines — progression linéaire claire.`;
+function setsToday(logs) { return logs.filter(s => isToday(s.date)).length; }
+
+function last7d(items) {
+  const cutoff = Date.now() - 7 * 86400000;
+  return items.filter(x => new Date(x.date).getTime() >= cutoff);
 }
+
+function sessionDays7d(logs) { return new Set(last7d(logs).map(s => s.date.slice(0, 10))).size; }
+
+// ── Outils (panneau) ──────────────────────────────────────────────────────────
 
 async function resetSharedPlan() {
   await supabase.from('shared_plans').upsert({
     id: 'main', plan: {}, updated_by: 'reset', updated_at: new Date().toISOString(),
   });
   return '🗑️ Plan partagé réinitialisé sur les deux appareils.';
-}
-
-async function getUserInfo() {
-  const name = await getUserName();
-  if (!name) return '⚠️ Aucun utilisateur connecté (mode local).';
-  const local = await getLogs();
-  const cloud = await getCloudLogs(name);
-  const lastDate = local.length > 0
-    ? new Date(Math.max(...local.map(s => new Date(s.date).getTime()))).toLocaleDateString('fr-CA')
-    : '—';
-  let cloudUsers = '?';
-  try {
-    const { data, error } = await supabase.from('workout_logs').select('user_name').limit(500);
-    if (error) cloudUsers = `erreur: ${error.message}`;
-    else if (data) cloudUsers = [...new Set(data.map(r => r.user_name).filter(Boolean))].join(', ') || '(aucun)';
-  } catch {}
-  return (
-    `👤 Utilisateur : ${name}\n` +
-    `📱 Logs locaux : ${local.length}\n` +
-    `☁️  Logs cloud : ${cloud?.length ?? '?'}\n` +
-    `📅 Dernière séance : ${lastDate}\n` +
-    `👥 Utilisateurs cloud : ${cloudUsers}`
-  );
 }
 
 async function testSupabaseConnection() {
@@ -169,23 +134,14 @@ export default function DuoScreen() {
   const [loading,  setLoading]  = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Dev panel
+  // Radar panel (ex-dev panel)
   const tapCount  = useRef(0);
   const tapTimer  = useRef(null);
   const [devVisible, setDevVisible] = useState(false);
   const [devLog,     setDevLog]     = useState('');
-  const channelRef  = useRef(null);
+  const [spyLoading, setSpyLoading] = useState(false);
+  const [spyData,    setSpyData]    = useState(null); // { activity, planMeta, myCardio, rivalCardio }
   const lastLoadRef = useRef(null);
-
-  // ── Reload channel ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const ch = supabase.channel('gym-reload-v1');
-    ch.on('broadcast', { event: 'reload' }, () => {
-      setTimeout(() => { try { DevSettings.reload(); } catch {} }, 800);
-    }).subscribe();
-    channelRef.current = ch;
-    return () => { supabase.removeChannel(ch); };
-  }, []);
 
   // ── Data ───────────────────────────────────────────────────────────────────
 
@@ -216,16 +172,45 @@ export default function DuoScreen() {
     setRefreshing(false);
   }
 
-  // ── Dev panel ──────────────────────────────────────────────────────────────
+  // ── Radar panel ────────────────────────────────────────────────────────────
+
+  async function fetchSpyData() {
+    setSpyLoading(true);
+    try {
+      const [activity, planMeta, myCardio, rivalCardio] = await Promise.all([
+        getAllActivity(),
+        getSharedPlan(),
+        myName ? getCloudCardioLogs(myName) : null,
+        rival ? getCloudCardioLogs(rival) : null,
+      ]);
+      setSpyData({
+        activity,
+        planMeta,
+        myCardio: myCardio ?? [],
+        rivalCardio: rivalCardio ?? [],
+      });
+    } finally {
+      setSpyLoading(false);
+    }
+  }
+
+  const isRadarOwner = (myName ?? '').trim().toLowerCase() === RADAR_OWNER.toLowerCase();
+
+  function openSpyPanel() {
+    if (!isRadarOwner) return;
+    setDevLog('');
+    setDevVisible(true);
+    fetchSpyData();
+  }
 
   function handleTitleTap() {
+    if (!isRadarOwner) return;
     tapCount.current += 1;
     if (tapTimer.current) clearTimeout(tapTimer.current);
-    if (tapCount.current >= 7) {
+    if (tapCount.current >= 3) {
       tapCount.current = 0;
       Vibration.vibrate(80);
-      setDevLog('');
-      setDevVisible(true);
+      openSpyPanel();
       return;
     }
     tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 2000);
@@ -240,13 +225,6 @@ export default function DuoScreen() {
     } catch (e) {
       setDevLog(`❌ Erreur : ${e.message}`);
     }
-  }
-
-  async function fireReloadAll() {
-    try {
-      await channelRef.current?.send({ type: 'broadcast', event: 'reload', payload: {} });
-    } catch {}
-    setTimeout(() => { try { DevSettings.reload(); } catch {} }, 800);
   }
 
   // ── Duo logic ──────────────────────────────────────────────────────────────
@@ -299,9 +277,17 @@ export default function DuoScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
-          <Text style={styles.title}>DUO</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
+            <Text style={styles.title}>DUO</Text>
+          </TouchableOpacity>
+          {isRadarOwner && (
+            <TouchableOpacity style={styles.spyBtn} onPress={openSpyPanel} activeOpacity={0.75}>
+              <Text style={styles.spyBtnEmoji}>🕵️</Text>
+              <Text style={styles.spyBtnTxt}>RADAR</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <Text style={styles.subtitle}>
           {rival ? `${myName} vs ${rival}` : 'En attente du coéquipier…'}
         </Text>
@@ -552,57 +538,105 @@ export default function DuoScreen() {
         </ScrollView>
       )}
 
-      {/* ── Dev Panel ──────────────────────────────────────────────────────── */}
-      <Modal visible={devVisible} transparent animationType="slide">
+      {/* ── Radar Duo (panneau espion) ─────────────────────────────────────── */}
+      <Modal visible={devVisible} transparent animationType="slide" onRequestClose={() => setDevVisible(false)}>
         <View style={styles.devOverlay}>
           <View style={styles.devPanel}>
             <View style={styles.devHandle} />
-            <Text style={styles.devTitle}>🛠️ Dev Panel</Text>
+            <View style={styles.spyHdrRow}>
+              <Text style={styles.devTitle}>🕵️ Radar Duo</Text>
+              <TouchableOpacity onPress={fetchSpyData} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                {spyLoading
+                  ? <ActivityIndicator size="small" color={colors.primary} />
+                  : <Ionicons name="refresh" size={19} color={colors.textMuted} />
+                }
+              </TouchableOpacity>
+            </View>
 
             {devLog ? <Text style={styles.devLog}>{devLog}</Text> : null}
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-              <Text style={styles.devCat}>DONNÉES DE TEST</Text>
+              {!rival ? (
+                <Text style={styles.spyEmpty}>
+                  Aucun partenaire détecté — il doit enregistrer au moins une séance pour apparaître sur le radar.
+                </Text>
+              ) : (() => {
+                const act          = spyData?.activity?.[rival] ?? null;
+                const rivalCardio  = spyData?.rivalCardio ?? [];
+                const cardioToday  = rivalCardio.filter(c => isToday(c.date));
+                const lastCardio   = rivalCardio[0] ?? null; // trié desc côté cloud
+                const rivalSetsNow = setsToday(rivalLogs);
+                const nutrToday    = !!act && act.nutritionDay === todayKey();
+                const photoToday   = isToday(act?.lastPhotoAt);
+                const seenToday    = isToday(act?.lastSeenAt);
+                const planMeta     = spyData?.planMeta ?? null;
+                const noData       = 'Aucune donnée (son app est à jour ?)';
 
-              <DevBtn
-                icon="📊"
-                label="Seed 3 semaines d'historique"
-                sub="~250 sets répartis sur 7 jours × 3 semaines"
-                onPress={() => runDev('Seed', seedFakeHistory)}
-              />
-              <DevBtn
-                icon="📈"
-                label="Seed progression sur 10 semaines"
-                sub="Progression linéaire pour tester les graphiques"
-                onPress={() => runDev('Progression', seedProgressionData)}
-              />
+                const anyToday = rivalSetsNow > 0 || cardioToday.length > 0 || nutrToday || photoToday;
+                const verdict = anyToday
+                  ? `✅ ${rival} est actif aujourd'hui — rien à signaler.`
+                  : seenToday
+                    ? `😴 ${rival} a ouvert l'app aujourd'hui… mais n'a encore rien loggé.`
+                    : `👀 Aucun signe de vie de ${rival} aujourd'hui.`;
 
-              <Text style={styles.devCat}>DIAGNOSTIC</Text>
+                return (
+                  <>
+                    <View style={[styles.verdictCard, anyToday ? styles.verdictOk : styles.verdictKo]}>
+                      <Text style={styles.verdictTxt}>{verdict}</Text>
+                    </View>
 
-              <DevBtn
-                icon="👤"
-                label="Infos utilisateur"
-                sub="Nom, nb de logs locaux et cloud, utilisateurs actifs"
-                onPress={() => runDev('Info', getUserInfo)}
-              />
+                    <Text style={styles.devCat}>AUJOURD'HUI — {rival.toUpperCase()}</Text>
+
+                    <SpyRow icon="barbell-outline" label="Muscu" ok={rivalSetsNow > 0}
+                      value={rivalSetsNow > 0
+                        ? `${rivalSetsNow} sets ✓`
+                        : rivalLastDays != null ? `Rien · dernière il y a ${rivalLastDays} j` : 'Jamais loggé'}
+                    />
+                    <SpyRow icon="heart-outline" label="Cardio" ok={cardioToday.length > 0}
+                      value={cardioToday.length > 0
+                        ? cardioToday.map(c => `${formatDuration(c.durationSec)} ${getCardioTypeLabel(c.type)}`).join(' + ') + ' ✓'
+                        : lastCardio ? `Rien · dernier ${timeAgo(lastCardio.date)}` : 'Jamais loggé'}
+                    />
+                    <SpyRow icon="restaurant-outline" label="Nutrition" ok={nutrToday}
+                      value={!act
+                        ? noData
+                        : nutrToday
+                          ? `${act.caloriesToday ?? 0} kcal${act.proteinToday ? ` · ${act.proteinToday} g prot` : ''} ✓`
+                          : act.lastNutritionAt ? `Rien · dernier log ${timeAgo(act.lastNutritionAt)}` : 'Jamais loggé'}
+                    />
+                    <SpyRow icon="camera-outline" label="Photo" ok={photoToday}
+                      value={!act
+                        ? noData
+                        : act.lastPhotoAt
+                          ? photoToday ? 'Nouvelle photo aujourd\'hui ✓' : `Dernière ${timeAgo(act.lastPhotoAt)}`
+                          : 'Jamais'}
+                    />
+                    <SpyRow icon="eye-outline" label="App ouverte" ok={seenToday}
+                      value={act?.lastSeenAt ? timeAgo(act.lastSeenAt) : noData}
+                    />
+                    <SpyRow icon="calendar-outline" label="Plan partagé"
+                      ok={!!planMeta && planMeta.updatedBy === rival && isToday(planMeta.updatedAt)}
+                      value={planMeta
+                        ? `Modifié par ${planMeta.updatedBy} · ${timeAgo(planMeta.updatedAt)}`
+                        : 'Aucun plan sync'}
+                    />
+
+                    <Text style={styles.devCat}>CETTE SEMAINE — TOI vs {rival.toUpperCase()}</Text>
+                    <VsRow label="Séances muscu" a={sessionDays7d(myLogs)} b={sessionDays7d(rivalLogs)} />
+                    <VsRow label="Sets totaux"   a={last7d(myLogs).length} b={last7d(rivalLogs).length} />
+                    <VsRow label="Cardios"       a={last7d(spyData?.myCardio ?? []).length} b={last7d(rivalCardio).length} />
+                  </>
+                );
+              })()}
+
+              <Text style={styles.devCat}>OUTILS</Text>
+
               <DevBtn
                 icon="🔌"
                 label="Test connexion Supabase"
                 sub="Vérifie la latence et l'état de la base de données"
                 onPress={() => runDev('Ping', testSupabaseConnection)}
-              />
-
-              <Text style={styles.devCat}>SYNCHRONISATION</Text>
-
-              <DevBtn
-                icon="🔄"
-                label="Reload tous les appareils"
-                sub="Envoie un signal de rechargement via Supabase Realtime"
-                onPress={() => runDev('Reload', async () => {
-                  await fireReloadAll();
-                  return '🔄 Signal envoyé — rechargement en cours sur tous les appareils.';
-                })}
               />
 
               <Text style={styles.devCat}>DANGER ZONE</Text>
@@ -664,11 +698,46 @@ function DevBtn({ icon, label, sub, onPress, danger }) {
   );
 }
 
+// Ligne du radar : icône + catégorie + statut (vert = fait aujourd'hui)
+function SpyRow({ icon, label, value, ok }) {
+  return (
+    <View style={styles.spyRow}>
+      <View style={[styles.spyIconWrap, ok && styles.spyIconOk]}>
+        <Ionicons name={icon} size={15} color={ok ? colors.success : colors.textMuted} />
+      </View>
+      <Text style={styles.spyLabel}>{label}</Text>
+      <Text style={[styles.spyValue, ok && { color: colors.success }]} numberOfLines={2}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+// Ligne de comparaison hebdo : moi | libellé | lui
+function VsRow({ label, a, b }) {
+  return (
+    <View style={styles.vsRow}>
+      <Text style={[styles.vsVal, a > b && styles.vsValWin]}>{a}</Text>
+      <Text style={styles.vsLabel}>{label}</Text>
+      <Text style={[styles.vsVal, b > a && styles.vsValWin]}>{b}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 38, fontWeight: '900', color: colors.text, letterSpacing: -1, marginBottom: 2 },
   subtitle: { fontSize: 13, color: colors.primary, fontWeight: '600', letterSpacing: 0.3 },
+  spyBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.surfaceElevated, borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  spyBtnEmoji: { fontSize: 14 },
+  spyBtnTxt: { fontSize: 10, fontWeight: '800', color: colors.textSecondary, letterSpacing: 1 },
 
   // Competition block
   compCard: { backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.border, marginBottom: 14, overflow: 'hidden' },
@@ -736,6 +805,34 @@ const styles = StyleSheet.create({
   devBtnSub:   { color: '#444', fontSize: 11, lineHeight: 15 },
   devClose:    { marginTop: 14, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: '#1e1e1e', backgroundColor: '#111' },
   devCloseTxt: { color: '#333', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
+
+  // Radar Duo
+  spyHdrRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  spyEmpty:    { fontSize: 13, color: colors.textSecondary, lineHeight: 20, paddingVertical: 18, textAlign: 'center' },
+  verdictCard: { borderRadius: 14, padding: 14, marginBottom: 4, borderWidth: 1 },
+  verdictOk:   { backgroundColor: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.35)' },
+  verdictKo:   { backgroundColor: 'rgba(245,158,11,0.07)', borderColor: 'rgba(245,158,11,0.3)' },
+  verdictTxt:  { fontSize: 13, fontWeight: '700', color: colors.text, lineHeight: 19 },
+  spyRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 6,
+    borderWidth: 1, borderColor: '#1e1e1e',
+  },
+  spyIconWrap: {
+    width: 30, height: 30, borderRadius: 10, backgroundColor: colors.surfaceElevated,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  spyIconOk: { backgroundColor: 'rgba(34,197,94,0.12)' },
+  spyLabel:  { width: 84, fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  spyValue:  { flex: 1, fontSize: 12, fontWeight: '600', color: colors.textMuted, textAlign: 'right' },
+  vsRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#111', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 16,
+    marginBottom: 6, borderWidth: 1, borderColor: '#1e1e1e',
+  },
+  vsVal:    { width: 44, fontSize: 18, fontWeight: '900', color: colors.textMuted, textAlign: 'center' },
+  vsValWin: { color: colors.primary },
+  vsLabel:  { flex: 1, fontSize: 12, fontWeight: '700', color: colors.textSecondary, textAlign: 'center', letterSpacing: 0.5 },
 
   // Enhanced scoreboard
   scoreWinPct:  { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginTop: 2 },

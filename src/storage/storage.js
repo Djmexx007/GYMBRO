@@ -52,15 +52,34 @@ async function uploadSession(sets, userName) {
   await supabase.from('workout_logs').insert(rows);
 }
 
+// Supabase plafonne chaque requête à 1000 lignes : il faut paginer, sinon
+// l'historique au-delà de 1000 sets disparaît silencieusement des stats.
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 20;
+
+async function fetchAllRows(buildQuery) {
+  const all = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error || !data) return page === 0 ? null : all;
+    all.push(...data);
+    if (data.length < PAGE_SIZE) break;
+  }
+  return all;
+}
+
 export async function getCloudLogs(userName) {
   try {
-    const { data, error } = await supabase
-      .from('workout_logs')
-      .select('exercise, weight, reps, logged_at')
-      .eq('user_name', userName)
-      .order('logged_at', { ascending: false });
+    const data = await fetchAllRows(() =>
+      supabase
+        .from('workout_logs')
+        .select('exercise, weight, reps, logged_at')
+        .eq('user_name', userName)
+        .order('logged_at', { ascending: false })
+    );
 
-    if (error || !data) return null;
+    if (!data) return null;
     return data.map(r => ({ exercise: r.exercise, weight: r.weight, reps: r.reps, date: r.logged_at }));
   } catch {
     return null;
@@ -69,13 +88,14 @@ export async function getCloudLogs(userName) {
 
 export async function getAllUsersLogs() {
   try {
-    const { data, error } = await supabase
-      .from('workout_logs')
-      .select('user_name, exercise, weight, reps, logged_at')
-      .order('logged_at', { ascending: false })
-      .limit(1000);
+    const data = await fetchAllRows(() =>
+      supabase
+        .from('workout_logs')
+        .select('user_name, exercise, weight, reps, logged_at')
+        .order('logged_at', { ascending: false })
+    );
 
-    if (error || !data) return {};
+    if (!data) return {};
 
     const byUser = {};
     data.forEach(r => {
@@ -225,6 +245,39 @@ export async function saveCardioSession(session) {
   }
 }
 
+// Monte dans le cloud les séances locales qui n'y sont pas (répare notamment le
+// bug historique où la colonne id était uuid et rejetait tous les inserts).
+export async function syncCardioToCloud() {
+  try {
+    const userName = await getUserName();
+    if (!userName) return;
+    const local = await getCardioLogs();
+    if (local.length === 0) return;
+    const { data, error } = await supabase.from('cardio_logs').select('id').eq('user_name', userName);
+    if (error) return;
+    const cloudIds = new Set((data ?? []).map(r => String(r.id)));
+    const missing = local.filter(s => s.id != null && !cloudIds.has(String(s.id)));
+    if (missing.length === 0) return;
+    await supabase.from('cardio_logs').insert(missing.map(s => ({
+      id: s.id,
+      user_name: userName,
+      type: s.type,
+      duration_sec: s.durationSec,
+      distance_km: s.distanceKm,
+      avg_speed_kmh: s.avgSpeedKmh,
+      max_speed_kmh: s.maxSpeedKmh,
+      avg_pace_min_km: s.avgPaceMinKm,
+      avg_incline_pct: s.avgInclinePct,
+      max_incline_pct: s.maxInclinePct,
+      calories: s.calories,
+      avg_hr: s.avgHr,
+      max_hr: s.maxHr,
+      notes: s.notes,
+      logged_at: s.date,
+    })));
+  } catch {}
+}
+
 export async function deleteCardioSession(id) {
   try {
     const existing = await getCardioLogs();
@@ -356,6 +409,47 @@ export async function saveSharedPlan(plan, userName) {
       updated_at: new Date().toISOString(),
     });
   } catch {}
+}
+
+// ── Activité (radar duo) ──────────────────────────────────────────────────────
+// Table user_activity : une ligne par utilisateur, mise à jour par petits pings
+// partiels (app ouverte, nutrition, photo). Muscu, cardio et plan partagé ont
+// déjà leurs propres tables : on ne les duplique pas ici.
+
+export async function pingActivity(patch) {
+  try {
+    const userName = await getUserName();
+    if (!userName) return;
+    const row = { user_name: userName, updated_at: new Date().toISOString() };
+    if (patch.lastSeenAt      !== undefined) row.last_seen_at      = patch.lastSeenAt;
+    if (patch.lastNutritionAt !== undefined) row.last_nutrition_at = patch.lastNutritionAt;
+    if (patch.nutritionDay    !== undefined) row.nutrition_day     = patch.nutritionDay;
+    if (patch.caloriesToday   !== undefined) row.calories_today    = patch.caloriesToday;
+    if (patch.proteinToday    !== undefined) row.protein_today     = patch.proteinToday;
+    if (patch.lastPhotoAt     !== undefined) row.last_photo_at     = patch.lastPhotoAt;
+    // Upsert partiel : en cas de conflit, seules les colonnes envoyées sont écrasées
+    await supabase.from('user_activity').upsert(row, { onConflict: 'user_name' });
+  } catch {}
+}
+
+export async function getAllActivity() {
+  try {
+    const { data, error } = await supabase.from('user_activity').select('*');
+    if (error || !data) return {};
+    const byUser = {};
+    data.forEach(r => {
+      byUser[r.user_name] = {
+        lastSeenAt:      r.last_seen_at,
+        lastNutritionAt: r.last_nutrition_at,
+        nutritionDay:    r.nutrition_day,
+        caloriesToday:   r.calories_today,
+        proteinToday:    r.protein_today,
+        lastPhotoAt:     r.last_photo_at,
+        updatedAt:       r.updated_at,
+      };
+    });
+    return byUser;
+  } catch { return {}; }
 }
 
 // ── Favorites (private, local only) ──────────────────────────────────────────

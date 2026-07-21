@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl, TouchableOpacity,
   Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import {
   getCardioLogs, getCloudCardioLogs, saveCardioSession, deleteCardioSession,
-  getCardioProfile, saveCardioProfile, getUserName,
+  getCardioProfile, saveCardioProfile, getUserName, syncCardioToCloud,
 } from '../storage/storage';
 import { CARDIO_TYPES, isInclineCapable, getCardioTypeLabel, getCardioTypeIcon } from '../data/cardioTypes';
 import {
@@ -68,12 +68,14 @@ function formatDate(iso) {
 
 function CardioLineChart({ data, trend, pr, formatValue }) {
   const [containerW, setContainerW] = useState(0);
+  // Id unique par instance mais stable entre les rendus (plusieurs charts par écran)
+  const gradIdRef = useRef(`cardioGrad${Math.random().toString(36).slice(2, 9)}`);
   if (!data || data.length < 2) return null;
 
   const CHART_H   = 72;
   const PAD_X     = 8;
   const lineColor = trend === 'up' ? colors.success : trend === 'down' ? colors.danger : colors.primary;
-  const gradId    = `cardioGrad${trend}${Math.round(Math.random() * 1e6)}`;
+  const gradId    = gradIdRef.current;
 
   const visible = data.slice(-12);
   const values  = visible.map(d => d.value);
@@ -234,6 +236,9 @@ export default function CardioScreen({ navigation }) {
 
   async function load() {
     const name = await getUserName();
+    // Répare d'abord les séances locales jamais montées dans le cloud,
+    // pour que la lecture cloud qui suit soit complète.
+    await syncCardioToCloud();
     let raw = null;
     if (name) raw = await getCloudCardioLogs(name);
     if (!raw || raw.length === 0) raw = await getCardioLogs();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { lbToKg } from '../lib/units';
+import { pingActivity } from '../storage/storage';
 
 // ─── Nutrition defaults ───────────────────────────────────────────────────────
 const DEFAULT_NUTR = { calories: 0, protein: 0, carbs: 0, fat: 0, caffeine: 0 };
@@ -39,6 +40,7 @@ export default function MetricsScreen({ navigation }) {
   const [nutr, setNutr]               = useState({ ...DEFAULT_NUTR });
   const [today, setToday]             = useState(() => new Date().toISOString().slice(0, 10));
   const [calorieGoal, setCalorieGoal] = useState(DEFAULT_CALORIE_GOAL);
+  const [weekHistory, setWeekHistory] = useState([]); // 6 jours précédents { day, calories }
 
   // IMC state
   const [weight,     setWeight]     = useState('');
@@ -60,14 +62,42 @@ export default function MetricsScreen({ navigation }) {
       setToday(todayStr);
       const goal = await AsyncStorage.getItem('@gym_calorie_goal');
       if (goal) setCalorieGoal(parseInt(goal, 10));
+
+      // Historique des 6 jours précédents (aujourd'hui vient de l'état live)
+      const prevDays = [];
+      for (let i = 6; i >= 1; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        prevDays.push(d.toISOString().slice(0, 10));
+      }
+      const entries = await AsyncStorage.multiGet(prevDays.map(day => `@gym_nutrition_${day}`));
+      setWeekHistory(entries.map(([, rawDay], i) => {
+        let calories = 0;
+        try { calories = rawDay ? (JSON.parse(rawDay).calories ?? 0) : 0; } catch {}
+        return { day: prevDays[i], calories };
+      }));
     }
     load();
   }, []));
 
   // ── Save nutrition on change ───────────────────────────────────────────────
+  const nutrPingTimer = useRef(null);
   useEffect(() => {
     if (!today) return;
     AsyncStorage.setItem(`@gym_nutrition_${today}`, JSON.stringify(nutr)).catch(() => {});
+
+    // Signal radar duo — debounce 4 s pour n'envoyer que la valeur finale d'une rafale de +/-
+    const hasData = nutr.calories > 0 || nutr.protein > 0 || nutr.carbs > 0 || nutr.fat > 0 || nutr.caffeine > 0;
+    if (!hasData) return;
+    if (nutrPingTimer.current) clearTimeout(nutrPingTimer.current);
+    nutrPingTimer.current = setTimeout(() => {
+      pingActivity({
+        lastNutritionAt: new Date().toISOString(),
+        nutritionDay: today,
+        caloriesToday: nutr.calories,
+        proteinToday: nutr.protein,
+      });
+    }, 4000);
   }, [nutr, today]);
 
   // ── Load IMC from storage on mount ────────────────────────────────────────
@@ -119,6 +149,15 @@ export default function MetricsScreen({ navigation }) {
   const calorieRatio   = Math.min(nutr.calories / calorieGoal, 1);
   const calorieOver    = nutr.calories > calorieGoal;
   const calorieBarColor = calorieOver ? colors.danger : colors.primary;
+
+  // ── Historique 7 jours ────────────────────────────────────────────────────
+  const weekBars  = [...weekHistory, { day: today, calories: nutr.calories }];
+  const weekScale = Math.max(calorieGoal, ...weekBars.map(b => b.calories), 1);
+  const daysWithData = weekBars.filter(b => b.calories > 0);
+  const weekAvg = daysWithData.length > 0
+    ? Math.round(daysWithData.reduce((sum, b) => sum + b.calories, 0) / daysWithData.length)
+    : 0;
+  const dayLetter = d => 'DLMMJVS'[new Date(d + 'T00:00:00Z').getUTCDay()];
 
   // ── Macro grid items ──────────────────────────────────────────────────────
   const macros = [
@@ -202,6 +241,43 @@ export default function MetricsScreen({ navigation }) {
                   { width: `${calorieRatio * 100}%`, backgroundColor: calorieBarColor },
                 ]}
               />
+            </View>
+          </View>
+
+          {/* Historique calories — 7 derniers jours */}
+          <View style={styles.nutrCard}>
+            <View style={styles.calorieRow}>
+              <Text style={styles.nutrLabel}>CALORIES — 7 JOURS</Text>
+              {weekAvg > 0 && <Text style={styles.calorieLabel}>moy. {weekAvg} kcal</Text>}
+            </View>
+            <View style={styles.weekRow}>
+              {weekBars.map((b, i) => {
+                const isCurrentDay = i === weekBars.length - 1;
+                const ratio = Math.min(b.calories / weekScale, 1);
+                const over  = b.calories > calorieGoal;
+                return (
+                  <View key={b.day} style={styles.weekCol}>
+                    <View
+                      style={[
+                        styles.weekBar,
+                        {
+                          height: Math.max(4, ratio * 64),
+                          backgroundColor: over
+                            ? colors.danger
+                            : isCurrentDay
+                              ? colors.primary
+                              : b.calories > 0
+                                ? 'rgba(255,107,0,0.35)'
+                                : colors.surfaceElevated,
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.weekDay, isCurrentDay && { color: colors.primary }]}>
+                      {dayLetter(b.day)}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
 
@@ -468,6 +544,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   calorieBarFill: { height: 6, borderRadius: 3 },
+
+  // ── Historique 7 jours ─────────────────────────────────────────────────────
+  weekRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+    marginTop: 6,
+  },
+  weekCol: { flex: 1, alignItems: 'center', gap: 6 },
+  weekBar: { width: '100%', borderRadius: 5 },
+  weekDay: { fontSize: 10, fontWeight: '800', color: colors.textMuted },
 
   nutrResetBtn: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 20 },
   nutrResetText: { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2 },

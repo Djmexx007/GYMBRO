@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { pingActivity } from './storage';
 
 const PHOTOS_KEY = '@gym_progress_photos';
 const PHOTOS_DIR = (FileSystem.documentDirectory ?? '') + 'progress_photos/';
@@ -36,6 +37,7 @@ export async function savePhoto(sourceUri, { note = '', tags = [], weight = null
   const existing = await getPhotos();
   const updated = [...existing, photo].sort((a, b) => a.date.localeCompare(b.date));
   await AsyncStorage.setItem(PHOTOS_KEY, JSON.stringify(updated));
+  pingActivity({ lastPhotoAt: photo.date }); // signal pour le radar duo — fire and forget
   return photo;
 }
 

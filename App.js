@@ -21,6 +21,7 @@ import CardioScreen          from './src/screens/CardioScreen';
 import PhotosScreen          from './src/screens/PhotosScreen';
 import IdentityScreen        from './src/screens/IdentityScreen';
 import WorkoutGeneratorModal from './src/screens/WorkoutGeneratorModal';
+import { pingActivity } from './src/storage/storage';
 import { colors } from './src/theme';
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -128,6 +129,7 @@ export default function App() {
     AsyncStorage.getItem('@gym_user_name').then(name => {
       setUserName(name);
       setReady(true);
+      if (name) pingActivity({ lastSeenAt: new Date().toISOString() }); // radar duo
     });
   }, []);
 
@@ -137,7 +139,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="light" />
       {!userName ? (
-        <IdentityScreen onDone={name => setUserName(name)} />
+        <IdentityScreen onDone={name => { setUserName(name); pingActivity({ lastSeenAt: new Date().toISOString() }); }} />
       ) : (
         <NavigationContainer>
           <MainTabs />

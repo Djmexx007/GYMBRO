@@ -91,7 +91,7 @@ export default function TodayScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.dayLabel}>{dayName.toUpperCase()}</Text>
-        <Text style={styles.title}>Today's Workout</Text>
+        <Text style={styles.title}>Séance du jour</Text>
         <View style={styles.musclesRow}>
           {today.label ? (
             <View style={styles.muscleChip}>

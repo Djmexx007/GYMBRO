@@ -36,7 +36,6 @@ import * as Clipboard from 'expo-clipboard';
 
 const DAYS_SHORT = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
 const DAYS_FULL  = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-const TODAY      = new Date().getDay();
 
 const PLAN_TYPES = [
   { key: 'ppl',    label: 'Push\nPull\nLegs', icon: '💪' },
@@ -58,6 +57,7 @@ function muscleStatus(load, muscle) {
 }
 
 export default function PlanScreen() {
+  const TODAY = new Date().getDay(); // recalculé à chaque rendu — reste juste après minuit
   const [plan,        setPlan]        = useState(null);
   const [library,     setLibrary]     = useState([]);
   const [favorites,   setFavorites]   = useState([]);

@@ -9,15 +9,41 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Vibration,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
-import { saveSession } from '../storage/storage';
+import { saveSession, getLogs, getCloudLogs, getUserName } from '../storage/storage';
 import { getPrimary, getSecondary, isDumbbellExercise, toDisplayWeight, toStoredWeight } from '../data/muscleGroups';
 
 const DRAFT_KEY = '@gym_session_draft';
+
+// exercise → { last: meilleure série du jour le plus récent, best: poids max all-time (stocké) }
+function computeHistory(logs) {
+  const last = {};
+  const best = {};
+  const latestDay = {};
+  logs.forEach(s => {
+    if (best[s.exercise] == null || s.weight > best[s.exercise]) best[s.exercise] = s.weight;
+    const day = s.date.slice(0, 10);
+    const cur = latestDay[s.exercise];
+    if (!cur || day > cur.day || (day === cur.day && s.weight > cur.set.weight)) {
+      latestDay[s.exercise] = { day, set: s };
+    }
+  });
+  Object.keys(latestDay).forEach(ex => { last[ex] = latestDay[ex].set; });
+  return { last, best };
+}
+
+function fmtRest(sec) {
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+function fmtShortDate(iso) {
+  return new Date(iso).toLocaleDateString('fr-CA', { month: 'short', day: 'numeric' });
+}
 
 export default function WorkoutSession({ navigation, route }) {
   const { exercises, label } = route.params;
@@ -27,8 +53,39 @@ export default function WorkoutSession({ navigation, route }) {
   const [reps, setReps] = useState('');
   const [sessionSets, setSessionSets] = useState([]);
   const [showSummary, setShowSummary] = useState(false);
+  const [lastPerf, setLastPerf] = useState({});     // exercise → dernière série connue
+  const [bestWeights, setBestWeights] = useState({}); // exercise → poids max all-time (stocké)
+  const [lastSetAt, setLastSetAt] = useState(null);   // chrono de repos
+  const [now, setNow] = useState(Date.now());
 
   const repsInputRef = useRef(null);
+
+  // Historique — alimente « Dernière fois » et la détection de PR
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let logs = null;
+      try {
+        const name = await getUserName();
+        if (name) logs = await getCloudLogs(name);
+      } catch {}
+      if (!logs || logs.length === 0) logs = await getLogs();
+      if (cancelled || !logs || logs.length === 0) return;
+      const { last, best } = computeHistory(logs);
+      setLastPerf(last);
+      setBestWeights(best);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Tick du chrono de repos
+  useEffect(() => {
+    if (!lastSetAt || showSummary) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lastSetAt, showSummary]);
+
+  const restSec = lastSetAt ? Math.max(0, Math.floor((now - lastSetAt) / 1000)) : null;
 
   // Draft recovery — si l'app a fermé pendant une séance, proposer de reprendre
   useEffect(() => {
@@ -55,20 +112,29 @@ export default function WorkoutSession({ navigation, route }) {
     const w = parseFloat(weight);
     const r = parseInt(reps, 10);
     if (!weight || !reps || isNaN(w) || isNaN(r) || r <= 0 || w < 0) {
-      Alert.alert('Missing info', 'Enter weight and reps before saving a set.');
+      Alert.alert('Infos manquantes', 'Entre le poids et les reps avant de valider le set.');
       return;
     }
+    const stored = toStoredWeight(currentExercise, w);
+    const prevBest = bestWeights[currentExercise];
+    const isPr = prevBest != null && stored > prevBest;
     const newSet = {
       exercise: currentExercise,
-      weight: toStoredWeight(currentExercise, w),
+      weight: stored,
       reps: r,
       date: new Date().toISOString(),
+      ...(isPr ? { isPr: true } : {}),
     };
+    if (isPr) {
+      Vibration.vibrate([0, 60, 80, 60]);
+      setBestWeights(prev => ({ ...prev, [currentExercise]: stored }));
+    }
     setSessionSets(prev => {
       const next = [...prev, newSet];
       AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ sets: next })).catch(() => {});
       return next;
     });
+    setLastSetAt(Date.now());
     setReps('');
     repsInputRef.current?.focus();
   }
@@ -89,21 +155,29 @@ export default function WorkoutSession({ navigation, route }) {
 
   async function finishWorkout() {
     if (sessionSets.length === 0) {
-      Alert.alert('No sets logged', 'Log at least one set before finishing.');
+      Alert.alert('Aucun set enregistré', 'Valide au moins un set avant de terminer.');
       return;
     }
-    await saveSession(sessionSets);
+    // isPr est un état d'affichage local — on ne le persiste pas
+    await saveSession(sessionSets.map(({ isPr, ...s }) => s));
     await AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
     setShowSummary(true);
   }
 
   function confirmAbort() {
     Alert.alert(
-      'Abort workout?',
-      'Your sets will not be saved.',
+      'Abandonner la séance ?',
+      'Tes sets ne seront pas sauvegardés.',
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Abort', style: 'destructive', onPress: () => navigation.goBack() },
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Abandonner',
+          style: 'destructive',
+          onPress: () => {
+            AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
+            navigation.goBack();
+          },
+        },
       ]
     );
   }
@@ -112,13 +186,16 @@ export default function WorkoutSession({ navigation, route }) {
   if (showSummary) {
     const uniqueExercises = [...new Set(sessionSets.map(s => s.exercise))];
     const totalVolume = sessionSets.reduce((acc, s) => acc + s.weight * s.reps, 0);
+    const prCount = sessionSets.filter(s => s.isPr).length;
 
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.summaryContent}>
-          <Text style={styles.summaryEmoji}>💪</Text>
-          <Text style={styles.summaryTitle}>WORKOUT DONE!</Text>
-          <Text style={styles.summaryLabel}>{label}</Text>
+          <Text style={styles.summaryEmoji}>{prCount > 0 ? '🏆' : '💪'}</Text>
+          <Text style={styles.summaryTitle}>SÉANCE TERMINÉE !</Text>
+          <Text style={styles.summaryLabel}>
+            {label}{prCount > 0 ? ` · ${prCount} PR 🏆` : ''}
+          </Text>
 
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
@@ -127,23 +204,24 @@ export default function WorkoutSession({ navigation, route }) {
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{uniqueExercises.length}</Text>
-              <Text style={styles.statKey}>EXERCISES</Text>
+              <Text style={styles.statKey}>EXERCICES</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{Math.round(totalVolume).toLocaleString()}</Text>
-              <Text style={styles.statKey}>LBS VOLUME</Text>
+              <Text style={styles.statKey}>VOLUME LBS</Text>
             </View>
           </View>
 
-          <Text style={styles.sectionLabel}>SUMMARY</Text>
+          <Text style={styles.sectionLabel}>RÉSUMÉ</Text>
           {uniqueExercises.map(ex => {
             const sets = sessionSets.filter(s => s.exercise === ex);
             const best = sets.reduce((a, b) => (a.weight > b.weight ? a : b));
+            const hasPr = sets.some(s => s.isPr);
             return (
               <View key={ex} style={styles.summaryExRow}>
-                <Text style={styles.summaryExName}>{ex}</Text>
+                <Text style={styles.summaryExName}>{ex}{hasPr ? ' 🏆' : ''}</Text>
                 <Text style={styles.summaryExDetail}>
-                  {sets.length} sets · best {toDisplayWeight(ex, best.weight)} × {best.reps}
+                  {sets.length} sets · meilleur {toDisplayWeight(ex, best.weight)} × {best.reps}
                 </Text>
               </View>
             );
@@ -154,7 +232,7 @@ export default function WorkoutSession({ navigation, route }) {
             onPress={() => navigation.goBack()}
             activeOpacity={0.8}
           >
-            <Text style={styles.doneBtnText}>DONE</Text>
+            <Text style={styles.doneBtnText}>TERMINÉ</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -176,7 +254,7 @@ export default function WorkoutSession({ navigation, route }) {
           <Text style={styles.topLabel}>{label}</Text>
         </View>
         <TouchableOpacity style={styles.finishBtn} onPress={finishWorkout} activeOpacity={0.8}>
-          <Text style={styles.finishBtnText}>FINISH</Text>
+          <Text style={styles.finishBtnText}>TERMINER</Text>
         </TouchableOpacity>
       </View>
 
@@ -212,6 +290,21 @@ export default function WorkoutSession({ navigation, route }) {
             );
           })()}
 
+          {/* Dernière performance connue — tap pour préremplir le poids */}
+          {lastPerf[currentExercise] && (
+            <TouchableOpacity
+              style={styles.lastPerfChip}
+              onPress={() => setWeight(String(toDisplayWeight(currentExercise, lastPerf[currentExercise].weight)))}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
+              <Text style={styles.lastPerfTxt}>
+                Dernière fois : {toDisplayWeight(currentExercise, lastPerf[currentExercise].weight)} × {lastPerf[currentExercise].reps}
+                {'  ·  '}{fmtShortDate(lastPerf[currentExercise].date)}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Live set log */}
           {currentExerciseSets.length > 0 && (
             <View style={styles.setsLog}>
@@ -227,6 +320,7 @@ export default function WorkoutSession({ navigation, route }) {
                   <Text style={styles.setVal}>
                     {toDisplayWeight(s.exercise, s.weight)} × {s.reps}
                   </Text>
+                  {s.isPr && <Text style={styles.setPr}>🏆</Text>}
                   <Ionicons name="checkmark-circle" size={20} color={colors.success} />
                 </View>
               ))}
@@ -237,7 +331,7 @@ export default function WorkoutSession({ navigation, route }) {
           <View style={styles.inputCard}>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>
-                {isDumbbellExercise(currentExercise) ? 'WEIGHT PER DUMBBELL (lbs)' : 'WEIGHT (lbs)'}
+                {isDumbbellExercise(currentExercise) ? 'POIDS PAR HALTÈRE (lbs)' : 'POIDS (lbs)'}
               </Text>
               <TextInput
                 style={styles.inputField}
@@ -269,15 +363,23 @@ export default function WorkoutSession({ navigation, route }) {
             </View>
           </View>
 
-          {/* SAVE SET */}
+          {/* VALIDER LE SET */}
           <TouchableOpacity style={styles.saveSetBtn} onPress={saveSet} activeOpacity={0.8}>
-            <Text style={styles.saveSetText}>SAVE SET</Text>
+            <Text style={styles.saveSetText}>VALIDER LE SET</Text>
           </TouchableOpacity>
 
-          {/* NEXT EXERCISE */}
+          {/* Chrono de repos — temps écoulé depuis le dernier set */}
+          {restSec != null && (
+            <View style={styles.restRow}>
+              <Ionicons name="timer-outline" size={15} color={colors.primary} />
+              <Text style={styles.restTxt}>Repos : {fmtRest(restSec)}</Text>
+            </View>
+          )}
+
+          {/* EXERCICE SUIVANT */}
           {!isLastExercise && (
             <TouchableOpacity style={styles.nextBtn} onPress={goNext} activeOpacity={0.8}>
-              <Text style={styles.nextBtnText}>NEXT EXERCISE</Text>
+              <Text style={styles.nextBtnText}>EXERCICE SUIVANT</Text>
               <Ionicons name="arrow-forward" size={18} color={colors.text} style={{ marginLeft: 8 }} />
             </TouchableOpacity>
           )}
@@ -285,7 +387,6 @@ export default function WorkoutSession({ navigation, route }) {
           {/* Exercise navigator dots */}
           <View style={styles.dotsRow}>
             {exercises.map((_, i) => {
-              const done = i < currentIndex;
               const active = i === currentIndex;
               const hasSets = sessionSets.some(s => s.exercise === exercises[i]);
               return (
@@ -294,7 +395,7 @@ export default function WorkoutSession({ navigation, route }) {
                   style={[
                     styles.dot,
                     active && styles.dotActive,
-                    done && hasSets && styles.dotDone,
+                    !active && hasSets && styles.dotDone,
                   ]}
                   onPress={() => jumpTo(i)}
                   hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
@@ -302,7 +403,7 @@ export default function WorkoutSession({ navigation, route }) {
                   <Text
                     style={[
                       styles.dotText,
-                      (active || (done && hasSets)) && styles.dotTextDark,
+                      (active || hasSets) && styles.dotTextDark,
                     ]}
                   >
                     {i + 1}
@@ -388,6 +489,42 @@ const styles = StyleSheet.create({
   },
   muscleSecondaryText: { fontSize: 10, fontWeight: '600', color: '#484848' },
 
+  // Dernière performance
+  lastPerfChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#111111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#242424',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginBottom: 14,
+  },
+  lastPerfTxt: {
+    color: '#999999',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Chrono de repos
+  restRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  restTxt: {
+    color: '#FF6B00',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
+  },
+
   // Sets log
   setsLog: {
     backgroundColor: '#111111',
@@ -418,6 +555,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 22,
     fontWeight: '800',
+  },
+  setPr: {
+    fontSize: 14,
+    marginRight: 8,
   },
 
   // Inputs

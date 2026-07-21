@@ -416,8 +416,9 @@ export default function ProgressScreen() {
     const name = await getUserName();
     let logs = null;
     if (name) logs = await getCloudLogs(name);
-    if (!logs || logs.length === 0) logs = await getLogs();
-    setIsCloud(!!name);
+    const usedCloud = !!(logs && logs.length > 0);
+    if (!usedCloud) logs = await getLogs();
+    setIsCloud(usedCloud);
 
     const allLogs = logs ?? [];
     setProgressData(computeProgressData(allLogs));
