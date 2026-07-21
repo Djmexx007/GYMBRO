@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, StyleSheet, Vibration,
+  View, StyleSheet, Vibration, AppState,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -18,10 +18,12 @@ import DuoScreen             from './src/screens/DuoScreen';
 import PlanScreen            from './src/screens/PlanScreen';
 import MetricsScreen         from './src/screens/MetricsScreen';
 import CardioScreen          from './src/screens/CardioScreen';
+import LiveCardioScreen      from './src/screens/LiveCardioScreen';
 import PhotosScreen          from './src/screens/PhotosScreen';
 import IdentityScreen        from './src/screens/IdentityScreen';
 import WorkoutGeneratorModal from './src/screens/WorkoutGeneratorModal';
 import { pingActivity } from './src/storage/storage';
+import { syncCoachNotifications } from './src/lib/coachNotifications';
 import { colors } from './src/theme';
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -58,6 +60,11 @@ function MetricsStack() {
       <Stack.Screen
         name="Cardio"
         component={CardioScreen}
+        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="LiveCardio"
+        component={LiveCardioScreen}
         options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: false }}
       />
     </Stack.Navigator>
@@ -129,9 +136,28 @@ export default function App() {
     AsyncStorage.getItem('@gym_user_name').then(name => {
       setUserName(name);
       setReady(true);
-      if (name) pingActivity({ lastSeenAt: new Date().toISOString() }); // radar duo
+      if (name) {
+        pingActivity({ lastSeenAt: new Date().toISOString() }); // radar duo
+        syncCoachNotifications(); // programme/purge les rappels coach selon la config cloud
+      }
     });
   }, []);
+
+  // Temps passé dans l'app (radar) — cumule les secondes actives du jour et ping le total
+  useEffect(() => {
+    if (!userName) return;
+    const id = setInterval(async () => {
+      if (AppState.currentState !== 'active') return;
+      try {
+        const day = new Date().toISOString().slice(0, 10);
+        const key = `@gym_app_time_${day}`;
+        const total = (parseInt((await AsyncStorage.getItem(key)) ?? '0', 10) || 0) + 60;
+        await AsyncStorage.setItem(key, String(total));
+        pingActivity({ appSecondsToday: total, appDay: day });
+      } catch {}
+    }, 60000);
+    return () => clearInterval(id);
+  }, [userName]);
 
   if (!ready) return null;
 
@@ -139,7 +165,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="light" />
       {!userName ? (
-        <IdentityScreen onDone={name => { setUserName(name); pingActivity({ lastSeenAt: new Date().toISOString() }); }} />
+        <IdentityScreen onDone={name => { setUserName(name); pingActivity({ lastSeenAt: new Date().toISOString() }); syncCoachNotifications(); }} />
       ) : (
         <NavigationContainer>
           <MainTabs />

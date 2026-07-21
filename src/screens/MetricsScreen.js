@@ -96,6 +96,7 @@ export default function MetricsScreen({ navigation }) {
         nutritionDay: today,
         caloriesToday: nutr.calories,
         proteinToday: nutr.protein,
+        caffeineToday: nutr.caffeine,
       });
     }, 4000);
   }, [nutr, today]);
@@ -135,6 +136,8 @@ export default function MetricsScreen({ navigation }) {
     const weightKg = weightUnit === 'lbs' ? lbToKg(w) : w;
     const heightM  = heightUnit === 'cm'  ? h / 100       : h;
     setBmi(calcBMI(weightKg, heightM));
+    // Signal radar : poids corporel saisi
+    pingActivity({ bodyWeight: w, bodyWeightUnit: weightUnit, bodyWeightAt: new Date().toISOString() });
   }
 
   function reset() {

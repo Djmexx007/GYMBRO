@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity, Modal, Alert, Vibration, RefreshControl,
+  TextInput, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,12 +11,19 @@ import { colors } from '../theme';
 import {
   getAllUsersLogs, getUserName, clearAllUsersLogs,
   getAllActivity, getSharedPlan, getCloudCardioLogs,
+  getCoachConfig, saveCoachConfig,
 } from '../storage/storage';
 import { supabase } from '../lib/supabase';
 import { toDisplayWeight } from '../data/muscleGroups';
 import { getCardioTypeLabel } from '../data/cardioTypes';
 import { formatDuration } from '../lib/cardioUnits';
 import { lbToKg } from '../lib/units';
+import {
+  sessionDetailToday, sessionDurationToday, recentPRs, overtakes,
+  usualHour, presenceCalendar, missedPlanDays,
+} from '../lib/duoIntel';
+
+const DAYS_FULL = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 function fmtKg(kg) { return kg >= 1000 ? `${(kg / 1000).toFixed(1)}k` : kg.toFixed(1); }
 
@@ -143,6 +151,14 @@ export default function DuoScreen() {
   const [spyData,    setSpyData]    = useState(null); // { activity, planMeta, myCardio, rivalCardio }
   const lastLoadRef = useRef(null);
 
+  // Coach fantôme (formulaire)
+  const [coachEnabled, setCoachEnabled] = useState(false);
+  const [coachTitle,   setCoachTitle]   = useState('Gym Duo 💪');
+  const [coachMessage, setCoachMessage] = useState('');
+  const [coachHour,    setCoachHour]    = useState('17');
+  const [coachMinute,  setCoachMinute]  = useState('00');
+  const [coachSaving,  setCoachSaving]  = useState(false);
+
   // ── Data ───────────────────────────────────────────────────────────────────
 
   async function load() {
@@ -177,11 +193,12 @@ export default function DuoScreen() {
   async function fetchSpyData() {
     setSpyLoading(true);
     try {
-      const [activity, planMeta, myCardio, rivalCardio] = await Promise.all([
+      const [activity, planMeta, myCardio, rivalCardio, coachCfg] = await Promise.all([
         getAllActivity(),
         getSharedPlan(),
         myName ? getCloudCardioLogs(myName) : null,
         rival ? getCloudCardioLogs(rival) : null,
+        rival ? getCoachConfig(rival) : null,
       ]);
       setSpyData({
         activity,
@@ -189,9 +206,41 @@ export default function DuoScreen() {
         myCardio: myCardio ?? [],
         rivalCardio: rivalCardio ?? [],
       });
+      if (coachCfg) {
+        setCoachEnabled(coachCfg.enabled);
+        setCoachTitle(coachCfg.title ?? 'Gym Duo 💪');
+        setCoachMessage(coachCfg.message ?? '');
+        setCoachHour(String(coachCfg.hour ?? 17));
+        setCoachMinute(String(coachCfg.minute ?? 0).padStart(2, '0'));
+      } else if (rival && !coachMessage) {
+        setCoachMessage(`Hey ${rival}, c'est le moment d'aller t'entraîner 💪`);
+      }
     } finally {
       setSpyLoading(false);
     }
+  }
+
+  async function handleSaveCoach() {
+    if (!rival) return;
+    const h = Math.min(23, Math.max(0, parseInt(coachHour, 10) || 0));
+    const m = Math.min(59, Math.max(0, parseInt(coachMinute, 10) || 0));
+    setCoachSaving(true);
+    const ok = await saveCoachConfig({
+      targetUser: rival,
+      enabled: coachEnabled,
+      title: coachTitle.trim() || 'Gym Duo 💪',
+      message: coachMessage.trim() || `Hey ${rival}, c'est le moment d'aller t'entraîner 💪`,
+      hour: h,
+      minute: m,
+    });
+    setCoachSaving(false);
+    setCoachHour(String(h));
+    setCoachMinute(String(m).padStart(2, '0'));
+    setDevLog(!ok
+      ? '❌ Impossible d\'enregistrer la config.'
+      : coachEnabled
+        ? `😈 Coach activé — rappel à ${h} h ${String(m).padStart(2, '0')} chez ${rival} les jours sans séance. Prend effet à sa prochaine ouverture de l'app.`
+        : 'Coach fantôme désactivé — ses rappels seront purgés à sa prochaine ouverture de l\'app.');
   }
 
   const isRadarOwner = (myName ?? '').trim().toLowerCase() === RADAR_OWNER.toLowerCase();
@@ -540,6 +589,7 @@ export default function DuoScreen() {
 
       {/* ── Radar Duo (panneau espion) ─────────────────────────────────────── */}
       <Modal visible={devVisible} transparent animationType="slide" onRequestClose={() => setDevVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.devOverlay}>
           <View style={styles.devPanel}>
             <View style={styles.devHandle} />
@@ -573,6 +623,21 @@ export default function DuoScreen() {
                 const planMeta     = spyData?.planMeta ?? null;
                 const noData       = 'Aucune donnée (son app est à jour ?)';
 
+                // Intel avancée
+                const rivalDetail   = sessionDetailToday(rivalLogs);
+                const rivalDuration = sessionDurationToday(rivalLogs);
+                const rivalUsual    = usualHour(rivalLogs);
+                const rivalPRList   = recentPRs(rivalLogs, 7);
+                const heOvertookMe  = overtakes(rivalLogs, myLogs, 7);
+                const iOvertookHim  = overtakes(myLogs, rivalLogs, 7);
+                const myPresence    = presenceCalendar(myLogs, 30);
+                const rivalPresence = presenceCalendar(rivalLogs, 30);
+                const missed        = missedPlanDays(planMeta?.plan ?? null, rivalLogs);
+                const appToday      = !!act && act.appDay === todayKey() && act.appSecondsToday > 0;
+                const nowH          = new Date().getHours() + new Date().getMinutes() / 60;
+                const isLate        = !!rivalUsual && rivalSetsNow === 0 &&
+                                      nowH > rivalUsual.hour + rivalUsual.minute / 60 + 1;
+
                 const anyToday = rivalSetsNow > 0 || cardioToday.length > 0 || nutrToday || photoToday;
                 const verdict = anyToday
                   ? `✅ ${rival} est actif aujourd'hui — rien à signaler.`
@@ -602,7 +667,7 @@ export default function DuoScreen() {
                       value={!act
                         ? noData
                         : nutrToday
-                          ? `${act.caloriesToday ?? 0} kcal${act.proteinToday ? ` · ${act.proteinToday} g prot` : ''} ✓`
+                          ? `${act.caloriesToday ?? 0} kcal${act.proteinToday ? ` · ${act.proteinToday} g prot` : ''}${act.caffeineToday ? ` · ${act.caffeineToday} mg caf.` : ''} ✓`
                           : act.lastNutritionAt ? `Rien · dernier log ${timeAgo(act.lastNutritionAt)}` : 'Jamais loggé'}
                     />
                     <SpyRow icon="camera-outline" label="Photo" ok={photoToday}
@@ -615,6 +680,24 @@ export default function DuoScreen() {
                     <SpyRow icon="eye-outline" label="App ouverte" ok={seenToday}
                       value={act?.lastSeenAt ? timeAgo(act.lastSeenAt) : noData}
                     />
+                    <SpyRow icon="phone-portrait-outline" label="Temps app" ok={appToday}
+                      value={!act
+                        ? noData
+                        : appToday
+                          ? `${Math.max(1, Math.round(act.appSecondsToday / 60))} min aujourd'hui`
+                          : 'Rien aujourd\'hui'}
+                    />
+                    <SpyRow icon="body-outline" label="Poids"
+                      value={act?.bodyWeight
+                        ? `${act.bodyWeight} ${act.bodyWeightUnit ?? 'lbs'} · ${timeAgo(act.bodyWeightAt)}`
+                        : noData}
+                    />
+                    <SpyRow icon="alarm-outline" label="Habitude"
+                      ok={isLate ? false : undefined}
+                      value={rivalUsual
+                        ? `S'entraîne vers ${rivalUsual.hour} h ${String(rivalUsual.minute).padStart(2, '0')}${isLate ? ' · en retard 👀' : ''}`
+                        : 'Pas assez de données'}
+                    />
                     <SpyRow icon="calendar-outline" label="Plan partagé"
                       ok={!!planMeta && planMeta.updatedBy === rival && isToday(planMeta.updatedAt)}
                       value={planMeta
@@ -622,10 +705,149 @@ export default function DuoScreen() {
                         : 'Aucun plan sync'}
                     />
 
+                    {/* ── Sa séance du jour, en détail ── */}
+                    {rivalDetail && (
+                      <>
+                        <Text style={styles.devCat}>SA SÉANCE DU JOUR</Text>
+                        <Text style={styles.intelMeta}>
+                          {rivalDuration ? `Durée ≈ ${rivalDuration} min · ` : ''}
+                          Volume {Math.round(rivalDetail.totalVolume).toLocaleString()} lbs
+                        </Text>
+                        {rivalDetail.exercises.map(e => (
+                          <View key={e.exercise} style={styles.intelRow}>
+                            <Text style={styles.intelName} numberOfLines={1}>{e.exercise}</Text>
+                            <Text style={styles.intelVal}>
+                              {e.sets} set{e.sets > 1 ? 's' : ''} · best {toDisplayWeight(e.exercise, e.best.weight)} × {e.best.reps}
+                            </Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+
+                    {/* ── PRs récents & dépassements ── */}
+                    {(rivalPRList.length > 0 || heOvertookMe.length > 0 || iOvertookHim.length > 0) && (
+                      <>
+                        <Text style={styles.devCat}>PRS & DÉPASSEMENTS — 7 JOURS</Text>
+                        {rivalPRList.map(p => (
+                          <View key={`pr-${p.exercise}`} style={styles.intelRow}>
+                            <Text style={styles.intelName} numberOfLines={1}>🏆 {p.exercise}</Text>
+                            <Text style={[styles.intelVal, { color: '#FFD700' }]}>
+                              {toDisplayWeight(p.exercise, p.weight)} lb (avant {toDisplayWeight(p.exercise, p.prevBest)})
+                            </Text>
+                          </View>
+                        ))}
+                        {heOvertookMe.map(o => (
+                          <View key={`ko-${o.exercise}`} style={styles.intelRow}>
+                            <Text style={styles.intelName} numberOfLines={1}>⚠️ Il t'a dépassé — {o.exercise}</Text>
+                            <Text style={[styles.intelVal, { color: colors.danger }]}>
+                              {toDisplayWeight(o.exercise, o.weight)} vs {toDisplayWeight(o.exercise, o.defenderBest)} lb
+                            </Text>
+                          </View>
+                        ))}
+                        {iOvertookHim.map(o => (
+                          <View key={`ok-${o.exercise}`} style={styles.intelRow}>
+                            <Text style={styles.intelName} numberOfLines={1}>✅ Tu l'as dépassé — {o.exercise}</Text>
+                            <Text style={[styles.intelVal, { color: colors.success }]}>
+                              {toDisplayWeight(o.exercise, o.weight)} vs {toDisplayWeight(o.exercise, o.defenderBest)} lb
+                            </Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+
+                    {/* ── Séances du plan manquées ── */}
+                    {missed && missed.length > 0 && (
+                      <>
+                        <Text style={styles.devCat}>PLAN — SÉANCES MANQUÉES CETTE SEMAINE</Text>
+                        {missed.map(m => (
+                          <View key={m.dayIdx} style={styles.intelRow}>
+                            <Text style={styles.intelName}>{DAYS_FULL[m.dayIdx]} — {m.label}</Text>
+                            <Text style={[styles.intelVal, { color: colors.warning }]}>Manquée</Text>
+                          </View>
+                        ))}
+                      </>
+                    )}
+
+                    {/* ── Présence 30 jours ── */}
+                    <Text style={styles.devCat}>PRÉSENCE — 30 DERNIERS JOURS</Text>
+                    <PresenceGrid label={myName} data={myPresence} />
+                    <PresenceGrid label={rival} data={rivalPresence} />
+
                     <Text style={styles.devCat}>CETTE SEMAINE — TOI vs {rival.toUpperCase()}</Text>
                     <VsRow label="Séances muscu" a={sessionDays7d(myLogs)} b={sessionDays7d(rivalLogs)} />
                     <VsRow label="Sets totaux"   a={last7d(myLogs).length} b={last7d(rivalLogs).length} />
                     <VsRow label="Cardios"       a={last7d(spyData?.myCardio ?? []).length} b={last7d(rivalCardio).length} />
+
+                    {/* ── Coach fantôme ── */}
+                    <Text style={styles.devCat}>😈 COACH FANTÔME</Text>
+                    <View style={styles.coachCard}>
+                      <View style={styles.coachRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.coachLbl}>Rappels automatiques chez {rival}</Text>
+                          <Text style={styles.coachHint}>
+                            Notification sur SON téléphone les jours sans séance, à l'heure choisie.
+                            Il ne saura pas que ça vient de toi. S'il s'entraîne, le rappel du jour saute tout seul.
+                          </Text>
+                        </View>
+                        <Switch
+                          value={coachEnabled}
+                          onValueChange={setCoachEnabled}
+                          trackColor={{ false: '#333', true: colors.primary }}
+                          thumbColor="#fff"
+                        />
+                      </View>
+
+                      <Text style={styles.coachInputLbl}>TITRE DE LA NOTIFICATION</Text>
+                      <TextInput
+                        style={styles.coachInput}
+                        value={coachTitle}
+                        onChangeText={setCoachTitle}
+                        placeholder="Gym Duo 💪"
+                        placeholderTextColor={colors.textMuted}
+                      />
+
+                      <Text style={styles.coachInputLbl}>MESSAGE</Text>
+                      <TextInput
+                        style={[styles.coachInput, { minHeight: 64, textAlignVertical: 'top' }]}
+                        value={coachMessage}
+                        onChangeText={setCoachMessage}
+                        multiline
+                        placeholder={`Hey ${rival}, c'est le moment d'aller t'entraîner 💪`}
+                        placeholderTextColor={colors.textMuted}
+                      />
+
+                      <Text style={styles.coachInputLbl}>HEURE DU RAPPEL</Text>
+                      <View style={styles.coachTimeRow}>
+                        <TextInput
+                          style={[styles.coachInput, styles.coachTimeInput]}
+                          value={coachHour}
+                          onChangeText={setCoachHour}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                          selectTextOnFocus
+                        />
+                        <Text style={styles.coachColon}>:</Text>
+                        <TextInput
+                          style={[styles.coachInput, styles.coachTimeInput]}
+                          value={coachMinute}
+                          onChangeText={setCoachMinute}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                          selectTextOnFocus
+                        />
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.coachSaveBtn}
+                        onPress={handleSaveCoach}
+                        disabled={coachSaving}
+                        activeOpacity={0.85}
+                      >
+                        {coachSaving
+                          ? <ActivityIndicator size="small" color="#000" />
+                          : <Text style={styles.coachSaveTxt}>ENREGISTRER LA CONFIG</Text>}
+                      </TouchableOpacity>
+                    </View>
                   </>
                 );
               })()}
@@ -676,6 +898,7 @@ export default function DuoScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -720,6 +943,24 @@ function VsRow({ label, a, b }) {
       <Text style={[styles.vsVal, a > b && styles.vsValWin]}>{a}</Text>
       <Text style={styles.vsLabel}>{label}</Text>
       <Text style={[styles.vsVal, b > a && styles.vsValWin]}>{b}</Text>
+    </View>
+  );
+}
+
+// Grille de présence 30 jours (un point par jour, vert = au moins un set)
+function PresenceGrid({ label, data }) {
+  const count = data.filter(d => d.active).length;
+  return (
+    <View style={styles.presenceWrap}>
+      <View style={styles.presenceHead}>
+        <Text style={styles.presenceLbl}>{(label ?? '').toUpperCase()}</Text>
+        <Text style={styles.presenceCount}>{count}/30 j</Text>
+      </View>
+      <View style={styles.presenceRow}>
+        {data.map(d => (
+          <View key={d.day} style={[styles.presenceDot, d.active && styles.presenceDotOn]} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -833,6 +1074,47 @@ const styles = StyleSheet.create({
   vsVal:    { width: 44, fontSize: 18, fontWeight: '900', color: colors.textMuted, textAlign: 'center' },
   vsValWin: { color: colors.primary },
   vsLabel:  { flex: 1, fontSize: 12, fontWeight: '700', color: colors.textSecondary, textAlign: 'center', letterSpacing: 0.5 },
+
+  // Intel rows (séance détaillée, PRs, plan manqué)
+  intelMeta: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 },
+  intelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+    backgroundColor: '#111', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14,
+    marginBottom: 6, borderWidth: 1, borderColor: '#1e1e1e',
+  },
+  intelName: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.text },
+  intelVal:  { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+
+  // Présence 30 jours
+  presenceWrap:  { backgroundColor: '#111', borderRadius: 12, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#1e1e1e' },
+  presenceHead:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  presenceLbl:   { fontSize: 10, fontWeight: '800', color: colors.textMuted, letterSpacing: 1 },
+  presenceCount: { fontSize: 11, fontWeight: '800', color: colors.primary },
+  presenceRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  presenceDot:   { width: 14, height: 14, borderRadius: 4, backgroundColor: colors.surfaceElevated },
+  presenceDotOn: { backgroundColor: colors.success },
+
+  // Coach fantôme
+  coachCard: {
+    backgroundColor: '#130a13', borderRadius: 16, padding: 16, marginBottom: 6,
+    borderWidth: 1, borderColor: '#3a1a3a',
+  },
+  coachRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  coachLbl:      { fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 4 },
+  coachHint:     { fontSize: 11, color: colors.textSecondary, lineHeight: 16 },
+  coachInputLbl: { fontSize: 9, fontWeight: '800', color: colors.textMuted, letterSpacing: 1.2, marginTop: 12, marginBottom: 6 },
+  coachInput: {
+    backgroundColor: '#0a0a0a', borderRadius: 12, borderWidth: 1, borderColor: '#2a2a2a',
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.text,
+  },
+  coachTimeRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  coachTimeInput: { width: 64, textAlign: 'center', fontSize: 18, fontWeight: '800' },
+  coachColon:     { fontSize: 20, fontWeight: '900', color: colors.textMuted },
+  coachSaveBtn: {
+    backgroundColor: colors.primary, borderRadius: 14, height: 48,
+    alignItems: 'center', justifyContent: 'center', marginTop: 16,
+  },
+  coachSaveTxt: { color: '#000', fontSize: 13, fontWeight: '900', letterSpacing: 1 },
 
   // Enhanced scoreboard
   scoreWinPct:  { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginTop: 2 },

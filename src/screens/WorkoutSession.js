@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { saveSession, getLogs, getCloudLogs, getUserName } from '../storage/storage';
+import { cancelTodayCoachNotification } from '../lib/coachNotifications';
 import { getPrimary, getSecondary, isDumbbellExercise, toDisplayWeight, toStoredWeight } from '../data/muscleGroups';
 
 const DRAFT_KEY = '@gym_session_draft';
@@ -161,6 +162,7 @@ export default function WorkoutSession({ navigation, route }) {
     // isPr est un état d'affichage local — on ne le persiste pas
     await saveSession(sessionSets.map(({ isPr, ...s }) => s));
     await AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
+    cancelTodayCoachNotification(); // séance faite → le rappel du jour saute
     setShowSummary(true);
   }
 

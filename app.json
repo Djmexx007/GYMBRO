@@ -27,7 +27,8 @@
       "bundleIdentifier": "com.gymduotracker.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Accès à ta caméra pour prendre des photos de progression.",
-        "NSPhotoLibraryUsageDescription": "Accès à tes photos pour ton journal de progression."
+        "NSPhotoLibraryUsageDescription": "Accès à tes photos pour ton journal de progression.",
+        "NSLocationWhenInUseUsageDescription": "Accès à ta position pour suivre tes activités cardio (vitesse, distance) en direct."
       }
     },
     "android": {
@@ -40,7 +41,10 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO"
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {

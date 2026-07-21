@@ -3,6 +3,7 @@
 // poids×reps des exercices de musculation.
 
 export const CARDIO_TYPES = [
+  { key: 'walking',      label: 'Marche',          icon: 'footsteps' },
   { key: 'running',      label: 'Course',          icon: 'walk' },
   { key: 'treadmill',    label: 'Tapis roulant',   icon: 'walk' },
   { key: 'incline_walk', label: 'Marche inclinée', icon: 'trending-up' },

@@ -427,6 +427,12 @@ export async function pingActivity(patch) {
     if (patch.caloriesToday   !== undefined) row.calories_today    = patch.caloriesToday;
     if (patch.proteinToday    !== undefined) row.protein_today     = patch.proteinToday;
     if (patch.lastPhotoAt     !== undefined) row.last_photo_at     = patch.lastPhotoAt;
+    if (patch.caffeineToday   !== undefined) row.caffeine_today    = patch.caffeineToday;
+    if (patch.bodyWeight      !== undefined) row.body_weight       = patch.bodyWeight;
+    if (patch.bodyWeightUnit  !== undefined) row.body_weight_unit  = patch.bodyWeightUnit;
+    if (patch.bodyWeightAt    !== undefined) row.body_weight_at    = patch.bodyWeightAt;
+    if (patch.appSecondsToday !== undefined) row.app_seconds_today = patch.appSecondsToday;
+    if (patch.appDay          !== undefined) row.app_day           = patch.appDay;
     // Upsert partiel : en cas de conflit, seules les colonnes envoyées sont écrasées
     await supabase.from('user_activity').upsert(row, { onConflict: 'user_name' });
   } catch {}
@@ -445,11 +451,59 @@ export async function getAllActivity() {
         caloriesToday:   r.calories_today,
         proteinToday:    r.protein_today,
         lastPhotoAt:     r.last_photo_at,
+        caffeineToday:   r.caffeine_today,
+        bodyWeight:      r.body_weight,
+        bodyWeightUnit:  r.body_weight_unit,
+        bodyWeightAt:    r.body_weight_at,
+        appSecondsToday: r.app_seconds_today,
+        appDay:          r.app_day,
         updatedAt:       r.updated_at,
       };
     });
     return byUser;
   } catch { return {}; }
+}
+
+// ── Coach fantôme ─────────────────────────────────────────────────────────────
+// Config des rappels programmés à distance : une ligne par utilisateur ciblé.
+// Le téléphone cible lit sa propre config à l'ouverture et programme des
+// notifications LOCALES (voir src/lib/coachNotifications.js).
+
+export async function getCoachConfig(targetUser) {
+  try {
+    const { data, error } = await supabase
+      .from('coach_config')
+      .select('*')
+      .eq('target_user', targetUser)
+      .single();
+    if (error || !data) return null;
+    return {
+      targetUser: data.target_user,
+      enabled: data.enabled,
+      title: data.title,
+      message: data.message,
+      hour: data.hour,
+      minute: data.minute,
+      updatedAt: data.updated_at,
+    };
+  } catch { return null; }
+}
+
+export async function saveCoachConfig(cfg) {
+  try {
+    const userName = await getUserName();
+    await supabase.from('coach_config').upsert({
+      target_user: cfg.targetUser,
+      enabled: cfg.enabled,
+      title: cfg.title,
+      message: cfg.message,
+      hour: cfg.hour,
+      minute: cfg.minute,
+      updated_by: userName ?? null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'target_user' });
+    return true;
+  } catch { return false; }
 }
 
 // ── Favorites (private, local only) ──────────────────────────────────────────

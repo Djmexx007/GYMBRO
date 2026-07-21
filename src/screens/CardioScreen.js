@@ -407,11 +407,23 @@ export default function CardioScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         showsVerticalScrollIndicator={false}
       >
+        {/* Activité GPS en direct — vitesse / distance / allure comme Strava */}
+        <TouchableOpacity style={st.liveBtn} onPress={() => navigation.navigate('LiveCardio')} activeOpacity={0.85}>
+          <View style={st.liveBtnIcon}>
+            <Ionicons name="navigate" size={22} color="#000" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.liveBtnTitle}>DÉMARRER UNE ACTIVITÉ GPS</Text>
+            <Text style={st.liveBtnSub}>Marche · Course · Vélo — vitesse, distance et allure en direct</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="rgba(0,0,0,0.6)" />
+        </TouchableOpacity>
+
         {sessions.length === 0 ? (
           <View style={st.empty}>
             <Ionicons name="heart-outline" size={64} color={colors.textMuted} />
             <Text style={st.emptyTitle}>Aucune séance cardio</Text>
-            <Text style={st.emptyText}>Log ta première séance avec le bouton + en haut pour démarrer le suivi.</Text>
+            <Text style={st.emptyText}>Lance une activité GPS ci-dessus, ou log une séance manuellement avec le bouton +.</Text>
           </View>
         ) : (
           <>
@@ -708,6 +720,20 @@ const st = StyleSheet.create({
   filterChipTxtOn: { color: '#000' },
 
   content: { padding: 16, paddingBottom: 40 },
+
+  // Bouton activité GPS
+  liveBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: colors.primary, borderRadius: 20, padding: 16, marginBottom: 16,
+    shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+  },
+  liveBtnIcon: {
+    width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  liveBtnTitle: { fontSize: 14, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
+  liveBtnSub: { fontSize: 11, color: 'rgba(0,0,0,0.65)', marginTop: 2, fontWeight: '600' },
 
   empty: { alignItems: 'center', paddingTop: 96, gap: 18 },
   emptyTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
